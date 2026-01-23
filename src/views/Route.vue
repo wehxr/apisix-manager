@@ -202,7 +202,7 @@
                   :value="uri"
                 />
               </el-select>
-              <div class="form-tip">支持多个路径，输入后按回车添加，支持通配符（如 /api/*）</div>
+              <div class="form-tip">HTTP 请求路径， 支持多个路径。如 /foo/index.html，支持请求路径前缀 /foo/*。/* 代表所有路径</div>
             </el-form-item>
 
             <el-form-item label="匹配域名" prop="hosts" required>
@@ -212,7 +212,7 @@
                 filterable
                 allow-create
                 default-first-option
-                placeholder="输入域名后按回车添加，支持通配符"
+                placeholder="请求域名，支持多个域名。如 example.com, *.example.com"
                 style="width: 100%"
               >
                 <el-option
@@ -236,9 +236,108 @@
                 <el-checkbox label="CONNECT">CONNECT</el-checkbox>
                 <el-checkbox label="TRACE">TRACE</el-checkbox>
               </el-checkbox-group>
-              <div class="form-tip">至少选择一个 HTTP 方法</div>
+              <div class="form-tip">至少选择一个 HTTP 方法，支持多个方法。如 GET, POST, PUT, DELETE</div>
             </el-form-item>
 
+            <el-divider>高级匹配规则 (vars)</el-divider>
+            <el-form-item label="变量匹配规则">
+              <div style="width: 100%">
+                <el-table :data="varsList" border style="width: 100%" size="small">
+                  <el-table-column prop="var" label="变量名" width="200">
+                    <template #default="{ row, $index }">
+                      <el-input
+                        v-model="row.var"
+                        placeholder="如: arg_name, cookie_token"
+                        size="small"
+                      />
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="operator" label="操作符" width="150">
+                    <template #default="{ row, $index }">
+                      <el-select 
+                        v-model="row.operator" 
+                        placeholder="选择操作符" 
+                        size="small" 
+                        style="width: 100%"
+                        @change="handleOperatorChange(row, $index)"
+                      >
+                        <el-option label="等于(==)" value="==" />
+                        <el-option label="不等于(~=)" value="~=" />
+                        <el-option label="大于(>)" value=">" />
+                        <el-option label="小于(<)" value="<" />
+                        <el-option label="大于等于(>=)" value=">=" />
+                        <el-option label="小于等于(<=)" value="<=" />
+                        <el-option label="正则匹配(~=)" value="~=" />
+                        <el-option label="正则匹配(不区分大小写)(~*)" value="~*" />
+                        <el-option label="包含(has)" value="has" />
+                        <el-option label="IN(in)" value="in" />
+                      </el-select>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="val" label="值" min-width="200">
+                    <template #default="{ row, $index }">
+                      <!-- in 和 not in 操作符使用多选输入 -->
+                      <el-select
+                        v-if="row.operator === 'in' || row.operator === 'not in'"
+                        v-model="row.val"
+                        multiple
+                        filterable
+                        allow-create
+                        default-first-option
+                        placeholder="输入值后按回车添加，支持多个值"
+                        size="small"
+                        style="width: 100%"
+                      >
+                        <el-option
+                          v-for="(item, idx) in (Array.isArray(row.val) ? row.val : [])"
+                          :key="idx"
+                          :label="item"
+                          :value="item"
+                        />
+                      </el-select>
+                      <!-- 其他操作符使用普通输入 -->
+                      <el-input
+                        v-else
+                        v-model="row.val"
+                        placeholder="匹配的值"
+                        size="small"
+                      />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="80" fixed="right">
+                    <template #default="{ row, $index }">
+                      <el-button
+                        type="danger"
+                        size="small"
+                        :icon="Delete"
+                        @click="removeVarRule($index)"
+                        link
+                      />
+                    </template>
+                  </el-table-column>
+                </el-table>
+                <el-button
+                  type="primary"
+                  size="small"
+                  :icon="Plus"
+                  @click="addVarRule"
+                  style="margin-top: 10px"
+                >
+                  添加规则
+                </el-button>
+                <div class="form-tip">
+                  支持的变量可以是如下内容：
+                  <br />
+                  请求参数：请求 URL 中的 Query 部分， 如 arg_name（name）
+                  <br />
+                  请求头字段：请求头中的 Header 部分， 如 user-agent（请求头）
+                  <br />
+                  Cookie 字段：请求中的 Cookie 部分， 如 cookie_token（token）
+                  <br />
+                  nginx 内置变量：如 request_uri, host, remote_addr, scheme 等等                  
+                </div>
+              </div>
+            </el-form-item>
 
           </el-tab-pane>
 
@@ -455,7 +554,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Delete } from '@element-plus/icons-vue'
 import { routeApi, upstreamApi, consumerApi, consumerGroupApi } from '../utils/api'
 import { formatTimestamp } from '../utils/format'
 
@@ -490,6 +589,7 @@ const enableBasicAuth = ref(false)
 const enableIpRestriction = ref(false)
 const enableCors = ref(false)
 const ipRestrictionType = ref('whitelist')
+const varsList = ref([])
 const form = ref({
   id: '',
   name: '',
@@ -723,6 +823,36 @@ const handleBasicAuthGroupChange = () => {
   form.value.basicAuthConsumer = ''
 }
 
+// 添加 vars 规则
+const addVarRule = () => {
+  varsList.value.push({
+    var: '',
+    operator: '==',
+    val: '' // 对于 in/not in，后续会转换为数组
+  })
+}
+
+// 删除 vars 规则
+const removeVarRule = (index) => {
+  varsList.value.splice(index, 1)
+}
+
+// 处理操作符变化
+const handleOperatorChange = (row, index) => {
+  // 当操作符切换到 in 或 not in 时，将值转换为数组
+  if (row.operator === 'in' || row.operator === 'not in') {
+    if (!Array.isArray(row.val)) {
+      // 如果当前值不是数组，转换为数组
+      row.val = row.val ? [String(row.val)] : []
+    }
+  } else {
+    // 当操作符从 in 或 not in 切换到其他时，将数组转换为字符串
+    if (Array.isArray(row.val)) {
+      row.val = row.val.length > 0 ? row.val[0] : ''
+    }
+  }
+}
+
 // 加载上游服务列表
 const loadUpstreamList = async () => {
   try {
@@ -869,6 +999,7 @@ const handleAdd = async () => {
   form.value.basicAuthConsumerGroup = ''
   basicAuthType.value = 'consumer'
   activeTab.value = 'basic'
+  varsList.value = []
   
   // 确保上游服务列表已加载
   if (upstreamList.value.length === 0) {
@@ -1011,6 +1142,31 @@ const handleEdit = async (row) => {
     }
   }
 
+  // 处理 vars 配置
+  if (row.vars && Array.isArray(row.vars) && row.vars.length > 0) {
+    varsList.value = row.vars.map(v => {
+      if (Array.isArray(v) && v.length >= 3) {
+        const operator = v[1] || '=='
+        let val = v[2]
+        // 对于 in 和 not in，值应该是数组
+        if (operator === 'in' || operator === 'not in') {
+          val = Array.isArray(val) ? val : (val ? [val] : [])
+        } else {
+          // 其他操作符，转换为字符串以便在输入框中显示
+          val = String(val || '')
+        }
+        return {
+          var: v[0] || '',
+          operator: operator,
+          val: val
+        }
+      }
+      return { var: '', operator: '==', val: '' }
+    }).filter(v => v.var) // 过滤掉空规则
+  } else {
+    varsList.value = []
+  }
+
   dialogVisible.value = true
 }
 
@@ -1069,6 +1225,39 @@ const handleSubmit = async () => {
         connect: form.value.timeout?.connect || 3,
         send: form.value.timeout?.send || 3,
         read: form.value.timeout?.read || 3
+      }
+
+      // 配置 vars 高级匹配规则
+      if (varsList.value && varsList.value.length > 0) {
+        const validVars = varsList.value
+          .filter(v => {
+            if (!v.var || !v.operator) return false
+            // 对于 in 和 not in，值必须是数组且不为空
+            if (v.operator === 'in') {
+              return Array.isArray(v.val) && v.val.length > 0
+            }
+            // 其他操作符，值不能为空
+            return v.val !== undefined && v.val !== ''
+          })
+          .map(v => {
+            let val = v.val
+            // 对于 in 和 not in，值已经是数组，直接使用
+            if (v.operator === 'in') {
+              val = Array.isArray(v.val) ? v.val : []
+            } else {
+              // 如果操作符是 >, <, >=, <=，尝试转换为数字
+              if (['>', '<', '>=', '<='].includes(v.operator)) {
+                const numVal = Number(val)
+                if (!isNaN(numVal) && String(val).trim() !== '') {
+                  val = numVal
+                }
+              }
+            }
+            return [v.var, v.operator, val]
+          })
+        if (validVars.length > 0) {
+          routeData.vars = validVars
+        }
       }
 
       // 配置 Basic Auth
@@ -1186,6 +1375,7 @@ const resetForm = () => {
   enableBasicAuth.value = false
   enableIpRestriction.value = false
   enableCors.value = false
+  varsList.value = []
 }
 
 onMounted(() => {
