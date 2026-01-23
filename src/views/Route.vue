@@ -205,7 +205,7 @@
               <div class="form-tip">支持多个路径，输入后按回车添加，支持通配符（如 /api/*）</div>
             </el-form-item>
 
-            <el-form-item label="匹配域名" prop="hosts">
+            <el-form-item label="匹配域名" prop="hosts" required>
               <el-select
                 v-model="form.hosts"
                 multiple
@@ -222,7 +222,7 @@
                   :value="host"
                 />
               </el-select>
-              <div class="form-tip">必填，支持多个域名，输入后按回车添加，支持通配符（如 *.example.com）</div>
+              <div class="form-tip">支持多个域名，输入后按回车添加，支持通配符（如 *.example.com）</div>
             </el-form-item>
             <el-form-item label="HTTP 方法" prop="methods">
               <el-checkbox-group v-model="form.methods">
@@ -304,12 +304,23 @@
               <el-switch v-model="enableBasicAuth" />
             </el-form-item>
             <template v-if="enableBasicAuth">
-              <el-form-item label="消费者">
+              <el-form-item label="限制类型">
+                <el-radio-group v-model="basicAuthType">
+                  <el-radio label="consumer">消费者</el-radio>
+                  <el-radio label="group">消费者组</el-radio>
+                </el-radio-group>
+              </el-form-item>
+              <el-form-item 
+                v-if="basicAuthType === 'consumer'" 
+                label="消费者"
+                prop="basicAuthConsumer"
+              >
                 <el-select
                   v-model="form.basicAuthConsumer"
                   filterable
                   placeholder="请选择消费者"
                   style="width: 100%"
+                  @change="handleBasicAuthConsumerChange"
                 >
                   <el-option
                     v-for="consumer in consumerList"
@@ -319,6 +330,33 @@
                   />
                 </el-select>
                 <div class="form-tip">只有选中的消费者可以访问此路由</div>
+              </el-form-item>
+              <el-form-item 
+                v-if="basicAuthType === 'group'" 
+                label="消费者组"
+                prop="basicAuthConsumerGroup"
+              >
+                <el-select
+                  v-model="form.basicAuthConsumerGroup"
+                  filterable
+                  placeholder="请选择消费者组"
+                  style="width: 100%"
+                  :loading="loadingConsumerGroups"
+                  @change="handleBasicAuthGroupChange"
+                >
+                  <el-option
+                    v-for="group in consumerGroupList"
+                    :key="group.id"
+                    :label="group.name || group.id"
+                    :value="group.id"
+                  >
+                    <span>{{ group.name || group.id }}</span>
+                    <span v-if="group.desc" style="color: #8492a6; font-size: 12px; margin-left: 10px">
+                      - {{ group.desc }}
+                    </span>
+                  </el-option>
+                </el-select>
+                <div class="form-tip">只有选中消费者组中的消费者可以访问此路由</div>
               </el-form-item>
             </template>
 
@@ -418,17 +456,20 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { routeApi, upstreamApi, consumerApi } from '../utils/api'
+import { routeApi, upstreamApi, consumerApi, consumerGroupApi } from '../utils/api'
 import { formatTimestamp } from '../utils/format'
 
 const loading = ref(false)
 const routeList = ref([])
 const upstreamList = ref([])
 const consumerList = ref([])
+const consumerGroupList = ref([])
+const loadingConsumerGroups = ref(false)
 const dialogVisible = ref(false)
 const dialogTitle = ref('创建路由')
 const formRef = ref(null)
 const activeTab = ref('basic')
+const basicAuthType = ref('consumer') // 'consumer' 或 'group'
 
 // 分页配置
 const pagination = ref({
@@ -458,7 +499,9 @@ const form = ref({
   priority: 0,
   upstream_id: '',
   desc: '',
-  plugins: {}
+  plugins: {},
+  basicAuthConsumer: '',
+  basicAuthConsumerGroup: ''
 })
 
 // 生成随机 ID
@@ -478,16 +521,7 @@ const rules = {
   ],
   uris: [{ required: true, message: '请输入路径', trigger: 'blur' }],
   hosts: [
-    {
-      validator: (rule, value, callback) => {
-        if (!value || value.length === 0) {
-          callback(new Error('请输入至少一个域名'))
-        } else {
-          callback()
-        }
-      },
-      trigger: 'change'
-    }
+    { required: true, message: '请输入至少一个域名', trigger: 'change' }
   ],
   upstream_id: [{ required: true, message: '请选择上游服务', trigger: 'blur' }],
   methods: [
@@ -503,6 +537,7 @@ const rules = {
     }
   ]
 }
+
 
 const handleUriInput = () => {
   if (uriInput.value) {
@@ -620,6 +655,102 @@ const handleCorsOriginsInput = () => {
   handleCorsInput()
 }
 
+// 加载消费者列表
+const loadConsumerList = async () => {
+  try {
+    const response = await consumerApi.list({ page_size: 100 })
+    const consumerData = response.data
+    if (consumerData.list) {
+      consumerList.value = consumerData.list.map(item => {
+        const value = item.value || {}
+        // 从 key 中提取 username，格式通常是 /apisix/consumers/{username}
+        let username = value.username
+        if (!username && item.key) {
+          const parts = item.key.split('/')
+          username = parts[parts.length - 1]
+        }
+        return {
+          ...value,
+          username: username || item.key
+        }
+      })
+    } else {
+      consumerList.value = []
+    }
+  } catch (error) {
+    consumerList.value = []
+  }
+}
+
+// 加载消费者组列表
+const loadConsumerGroups = async () => {
+  loadingConsumerGroups.value = true
+  try {
+    const response = await consumerGroupApi.list({ page_size: 100 })
+    const data = response.data
+    if (data.list) {
+      consumerGroupList.value = data.list.map(item => {
+        const value = item.value || {}
+        let id = value.id
+        if (!id && item.key) {
+          const parts = item.key.split('/')
+          id = parts[parts.length - 1]
+        }
+        return {
+          ...value,
+          id: id || item.key
+        }
+      })
+    } else {
+      consumerGroupList.value = []
+    }
+  } catch (error) {
+    consumerGroupList.value = []
+  } finally {
+    loadingConsumerGroups.value = false
+  }
+}
+
+// 处理 Basic Auth 消费者选择变化
+const handleBasicAuthConsumerChange = () => {
+  // 选择消费者时，清空消费者组
+  form.value.basicAuthConsumerGroup = ''
+}
+
+// 处理 Basic Auth 消费者组选择变化
+const handleBasicAuthGroupChange = () => {
+  // 选择消费者组时，清空消费者
+  form.value.basicAuthConsumer = ''
+}
+
+// 加载上游服务列表
+const loadUpstreamList = async () => {
+  try {
+    const upstreamRes = await upstreamApi.list()
+    const upstreamData = upstreamRes.data
+    if (upstreamData.list) {
+      upstreamList.value = upstreamData.list.map(item => {
+        const value = item.value || {}
+        let id = value.id
+        if (!id && item.key) {
+          // 从 key 中提取 ID，格式通常是 /apisix/upstreams/{id}
+          const parts = item.key.split('/')
+          id = parts[parts.length - 1]
+        }
+        return {
+          ...value,
+          id: id || item.key
+        }
+      })
+    } else {
+      upstreamList.value = []
+    }
+  } catch (error) {
+    // 错误消息已由拦截器自动显示
+    upstreamList.value = []
+  }
+}
+
 const loadData = async () => {
   loading.value = true
   try {
@@ -650,10 +781,18 @@ const loadData = async () => {
     // 处理上游列表
     const upstreamData = upstreamRes.data
     if (upstreamData.list) {
-      upstreamList.value = upstreamData.list.map(item => ({
-        ...item.value,
-        id: item.value.id || item.key
-      }))
+      upstreamList.value = upstreamData.list.map(item => {
+        const value = item.value || {}
+        let id = value.id
+        if (!id && item.key) {
+          const parts = item.key.split('/')
+          id = parts[parts.length - 1]
+        }
+        return {
+          ...value,
+          id: id || item.key
+        }
+      })
     } else {
       upstreamList.value = []
     }
@@ -661,10 +800,19 @@ const loadData = async () => {
     // 处理消费者列表
     const consumerData = consumerRes.data
     if (consumerData.list) {
-      consumerList.value = consumerData.list.map(item => ({
-        ...item.value,
-        username: item.value.username || item.key
-      }))
+      consumerList.value = consumerData.list.map(item => {
+        const value = item.value || {}
+        // 从 key 中提取 username，格式通常是 /apisix/consumers/{username}
+        let username = value.username
+        if (!username && item.key) {
+          const parts = item.key.split('/')
+          username = parts[parts.length - 1]
+        }
+        return {
+          ...value,
+          username: username || item.key
+        }
+      })
     } else {
       consumerList.value = []
     }
@@ -686,7 +834,7 @@ const handlePageChange = (page) => {
   loadData()
 }
 
-const handleAdd = () => {
+const handleAdd = async () => {
   dialogTitle.value = '创建路由'
   form.value = {
     id: generateRandomId(),
@@ -718,11 +866,29 @@ const handleAdd = () => {
   enableCors.value = false
   ipRestrictionType.value = 'whitelist'
   form.value.basicAuthConsumer = ''
+  form.value.basicAuthConsumerGroup = ''
+  basicAuthType.value = 'consumer'
   activeTab.value = 'basic'
+  
+  // 确保上游服务列表已加载
+  if (upstreamList.value.length === 0) {
+    await loadUpstreamList()
+  }
+  
+  // 确保消费者列表已加载
+  if (consumerList.value.length === 0) {
+    await loadConsumerList()
+  }
+  
+  // 确保消费者组列表已加载
+  if (consumerGroupList.value.length === 0) {
+    await loadConsumerGroups()
+  }
+  
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = async (row) => {
   dialogTitle.value = '编辑路由'
   form.value = {
     id: row.id,
@@ -740,18 +906,73 @@ const handleEdit = (row) => {
     },
     upstream_id: row.upstream_id || '',
     desc: row.desc || '',
-    plugins: row.plugins || {}
+    plugins: row.plugins || {},
+    basicAuthConsumer: '',
+    basicAuthConsumerGroup: ''
+  }
+  
+  // 确保上游服务列表已加载
+  if (upstreamList.value.length === 0) {
+    await loadUpstreamList()
+  }
+  
+  // 确保消费者列表已加载
+  if (consumerList.value.length === 0) {
+    await loadConsumerList()
+  }
+  
+  // 确保消费者组列表已加载
+  if (consumerGroupList.value.length === 0) {
+    await loadConsumerGroups()
   }
   
   // 处理 Basic Auth
   enableBasicAuth.value = !!(row.plugins?.['basic-auth'])
   if (enableBasicAuth.value) {
-    // 如果配置了 consumer-restriction，获取限制的消费者
+    // 如果配置了 consumer-restriction，获取限制的消费者或消费者组
     if (row.plugins?.['consumer-restriction']?.whitelist) {
-      form.value.basicAuthConsumer = row.plugins['consumer-restriction'].whitelist[0] || ''
+      const consumerRestriction = row.plugins['consumer-restriction']
+      const whitelist = consumerRestriction.whitelist[0] || ''
+      const restrictionType = consumerRestriction.type || 'consumer_name'
+      
+      // 优先使用 type 字段判断，如果没有 type 则通过值匹配判断
+      if (restrictionType === 'consumer_group_id') {
+        basicAuthType.value = 'group'
+        form.value.basicAuthConsumerGroup = whitelist
+        form.value.basicAuthConsumer = ''
+      } else if (restrictionType === 'consumer_name') {
+        basicAuthType.value = 'consumer'
+        form.value.basicAuthConsumer = whitelist
+        form.value.basicAuthConsumerGroup = ''
+      } else {
+        // 如果没有 type 字段，通过值匹配判断（兼容旧配置）
+        const isConsumer = consumerList.value.some(c => c.username === whitelist)
+        const isGroup = consumerGroupList.value.some(g => g.id === whitelist)
+        
+        if (isGroup) {
+          basicAuthType.value = 'group'
+          form.value.basicAuthConsumerGroup = whitelist
+          form.value.basicAuthConsumer = ''
+        } else if (isConsumer) {
+          basicAuthType.value = 'consumer'
+          form.value.basicAuthConsumer = whitelist
+          form.value.basicAuthConsumerGroup = ''
+        } else {
+          // 如果都不匹配，默认当作消费者处理
+          basicAuthType.value = 'consumer'
+          form.value.basicAuthConsumer = whitelist
+          form.value.basicAuthConsumerGroup = ''
+        }
+      }
     } else {
+      basicAuthType.value = 'consumer'
       form.value.basicAuthConsumer = ''
+      form.value.basicAuthConsumerGroup = ''
     }
+  } else {
+    basicAuthType.value = 'consumer'
+    form.value.basicAuthConsumer = ''
+    form.value.basicAuthConsumerGroup = ''
   }
 
   // 处理 IP 限制
@@ -855,10 +1076,18 @@ const handleSubmit = async () => {
         // Basic Auth 插件配置
         routeData.plugins['basic-auth'] = {}
         
-        // 如果指定了特定消费者，使用 consumer-restriction 插件限制
-        if (form.value.basicAuthConsumer) {
+        // 如果指定了特定消费者或消费者组，使用 consumer-restriction 插件限制
+        if (basicAuthType.value === 'consumer' && form.value.basicAuthConsumer) {
           routeData.plugins['consumer-restriction'] = {
-            whitelist: [form.value.basicAuthConsumer]
+            type: 'consumer_name',
+            whitelist: [form.value.basicAuthConsumer],
+            rejected_msg: '访问被拒绝，您没有权限访问此路由'
+          }
+        } else if (basicAuthType.value === 'group' && form.value.basicAuthConsumerGroup) {
+          routeData.plugins['consumer-restriction'] = {
+            type: 'consumer_group_id',
+            whitelist: [form.value.basicAuthConsumerGroup],
+            rejected_msg: '访问被拒绝，您没有权限访问此路由'
           }
         }
       }
@@ -961,6 +1190,8 @@ const resetForm = () => {
 
 onMounted(() => {
   loadData()
+  loadConsumerList()
+  loadConsumerGroups()
 })
 </script>
 

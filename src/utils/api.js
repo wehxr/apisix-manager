@@ -153,6 +153,21 @@ export const consumerApi = {
   delete: (username) => api.delete(`/apisix/admin/consumers/${username}`)
 }
 
+// Consumer Group 管理
+export const consumerGroupApi = {
+  list: (params = {}) => {
+    const queryParams = new URLSearchParams()
+    if (params.page) queryParams.append('page', params.page)
+    if (params.page_size) queryParams.append('page_size', params.page_size)
+    const queryString = queryParams.toString()
+    return api.get(`/apisix/admin/consumer_groups${queryString ? '?' + queryString : ''}`)
+  },
+  get: (id) => api.get(`/apisix/admin/consumer_groups/${id}`),
+  create: (id, data) => api.put(`/apisix/admin/consumer_groups/${id}`, data),
+  update: (id, data) => api.put(`/apisix/admin/consumer_groups/${id}`, data),
+  delete: (id) => api.delete(`/apisix/admin/consumer_groups/${id}`)
+}
+
 // 上游服务器管理
 export const upstreamApi = {
   list: (params = {}) => {

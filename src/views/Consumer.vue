@@ -6,53 +6,104 @@
           <span>消费者管理</span>
           <el-button type="primary" @click="handleAdd">
             <el-icon><Plus /></el-icon>
-            创建消费者
+            {{ activeTab === 'consumer' ? '创建消费者' : '创建消费者组' }}
           </el-button>
         </div>
       </template>
 
-      <el-table :data="consumerList" v-loading="loading" style="width: 100%">
-        <el-table-column prop="username" label="用户名"/>
-        <el-table-column prop="plugins" label="插件">
-          <template #default="{ row }">
-            <el-tag v-if="row.hasBasicAuth" type="success" size="small">Basic Auth</el-tag>
-            <span v-else style="color: #909399">-</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="desc" label="描述" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="create_time" label="创建时间" width="180">
-          <template #default="{ row }">
-            <span>{{ formatTimestamp(row.create_time) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="update_time" label="更新时间" width="180">
-          <template #default="{ row }">
-            <span>{{ formatTimestamp(row.update_time) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
-          <template #default="{ row }">
-            <el-button size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <el-tabs v-model="activeTab" @tab-change="handleTabChange">
+        <el-tab-pane label="消费者" name="consumer">
+          <el-table :data="consumerList" v-loading="loading" style="width: 100%">
+            <el-table-column prop="username" label="用户名"/>
+            <el-table-column prop="group_id" label="消费者组ID" width="150">
+              <template #default="{ row }">
+                <el-tag v-if="row.group_id" type="info" size="small">{{ row.group_id }}</el-tag>
+                <span v-else style="color: #909399">-</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="plugins" label="插件">
+              <template #default="{ row }">
+                <el-tag v-if="row.hasBasicAuth" type="success" size="small">Basic Auth</el-tag>
+                <span v-else style="color: #909399">-</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="desc" label="描述" min-width="200" show-overflow-tooltip />
+            <el-table-column prop="create_time" label="创建时间" width="180">
+              <template #default="{ row }">
+                <span>{{ formatTimestamp(row.create_time) }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="update_time" label="更新时间" width="180">
+              <template #default="{ row }">
+                <span>{{ formatTimestamp(row.update_time) }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="180" fixed="right">
+              <template #default="{ row }">
+                <el-button size="small" @click="handleEdit(row)">编辑</el-button>
+                <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
 
-      <!-- 分页 -->
-      <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
-        <el-pagination
-          v-model:current-page="pagination.page"
-          v-model:page-size="pagination.pageSize"
-          :page-sizes="[10, 20, 50, 100]"
-          :total="pagination.total"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="handleSizeChange"
-          @current-change="handlePageChange"
-        />
-      </div>
+          <!-- 分页 -->
+          <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
+            <el-pagination
+              v-model:current-page="pagination.page"
+              v-model:page-size="pagination.pageSize"
+              :page-sizes="[10, 20, 50, 100]"
+              :total="pagination.total"
+              layout="total, sizes, prev, pager, next, jumper"
+              @size-change="handleSizeChange"
+              @current-change="handlePageChange"
+            />
+          </div>
+        </el-tab-pane>
+
+        <el-tab-pane label="消费者组" name="group">
+          <el-table :data="groupList" v-loading="groupLoading" style="width: 100%">
+              <el-table-column prop="id" label="ID"/>
+            <el-table-column prop="name" label="名称" width="200">
+              <template #default="{ row }">
+                <span>{{ row.name || '-' }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="desc" label="描述" min-width="200" show-overflow-tooltip />
+            <el-table-column prop="create_time" label="创建时间" width="180">
+              <template #default="{ row }">
+                <span>{{ formatTimestamp(row.create_time) }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="update_time" label="更新时间" width="180">
+              <template #default="{ row }">
+                <span>{{ formatTimestamp(row.update_time) }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="180" fixed="right">
+              <template #default="{ row }">
+                <el-button size="small" @click="handleGroupEdit(row)">编辑</el-button>
+                <el-button size="small" type="danger" @click="handleGroupDelete(row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <!-- 分页 -->
+          <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
+            <el-pagination
+              v-model:current-page="groupPagination.page"
+              v-model:page-size="groupPagination.pageSize"
+              :page-sizes="[10, 20, 50, 100]"
+              :total="groupPagination.total"
+              layout="total, sizes, prev, pager, next, jumper"
+              @size-change="handleGroupSizeChange"
+              @current-change="handleGroupPageChange"
+            />
+          </div>
+        </el-tab-pane>
+      </el-tabs>
     </el-card>
 
-    <!-- 添加/编辑对话框 -->
+    <!-- 消费者添加/编辑对话框 -->
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
@@ -74,6 +125,29 @@
             :rows="3"
             placeholder="请输入描述信息（可选）"
           />
+        </el-form-item>
+        <el-form-item label="Consumer Group" prop="group_id">
+          <el-select
+            v-model="form.group_id"
+            placeholder="请选择 Consumer Group（可选）"
+            clearable
+            filterable
+            style="width: 100%"
+            :loading="loadingGroups"
+          >
+            <el-option
+              v-for="group in consumerGroupList"
+              :key="group.id"
+              :label="group.name || group.id"
+              :value="group.id"
+            >
+              <span>{{ group.name || group.id }}</span>
+              <span v-if="group.desc" style="color: #8492a6; font-size: 12px; margin-left: 10px">
+                - {{ group.desc }}
+              </span>
+            </el-option>
+          </el-select>
+          <div class="form-tip">Consumer Group 用于配置一组可以在 Consumer 间复用的插件</div>
         </el-form-item>
         <el-divider>Basic Auth 配置</el-divider>
         <el-form-item label="启用 Basic Auth">
@@ -102,6 +176,35 @@
         <el-button type="primary" @click="handleSubmit">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 消费者组添加/编辑对话框 -->
+    <el-dialog
+      v-model="groupDialogVisible"
+      :title="groupDialogTitle"
+      width="600px"
+      @close="resetGroupForm"
+    >
+      <el-form :model="groupForm" label-width="120px" ref="groupFormRef" :rules="groupRules">
+        <el-form-item label="名称" prop="name">
+          <el-input
+            v-model="groupForm.name"
+            placeholder="请输入消费者组名称（可选）"
+          />
+        </el-form-item>
+        <el-form-item label="描述" prop="desc">
+          <el-input
+            v-model="groupForm.desc"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入描述信息（可选）"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="groupDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleGroupSubmit">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -109,17 +212,31 @@
 import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { consumerApi, getConfig, getErrorMessage } from '../utils/api'
+import { consumerApi, consumerGroupApi, getConfig, getErrorMessage } from '../utils/api'
 import { formatTimestamp } from '../utils/format'
 import axios from 'axios'
 
+// 生成随机 ID
+const generateRandomId = () => {
+  return 'group_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 9)
+}
+
+const activeTab = ref('consumer')
 const loading = ref(false)
+const groupLoading = ref(false)
 const consumerList = ref([])
+const groupList = ref([])
 const dialogVisible = ref(false)
+const groupDialogVisible = ref(false)
 const dialogTitle = ref('创建消费者')
+const groupDialogTitle = ref('创建消费者组')
 const formRef = ref(null)
+const groupFormRef = ref(null)
 const enableBasicAuth = ref(false)
 const isEdit = ref(false)
+const isGroupEdit = ref(false)
+const consumerGroupList = ref([])
+const loadingGroups = ref(false)
 
 // 分页配置
 const pagination = ref({
@@ -128,11 +245,24 @@ const pagination = ref({
   total: 0
 })
 
+const groupPagination = ref({
+  page: 1,
+  pageSize: 10,
+  total: 0
+})
+
 const form = ref({
   username: '',
   desc: '',
+  group_id: '',
   authUsername: '',
   password: ''
+})
+
+const groupForm = ref({
+  id: '',
+  name: '',
+  desc: ''
 })
 
 const rules = {
@@ -151,6 +281,40 @@ const rules = {
   ]
 }
 
+const groupRules = {
+  // id 自动生成，不需要验证规则
+}
+
+// 加载 Consumer Group 列表（用于消费者表单中的选择器）
+const loadConsumerGroups = async () => {
+  loadingGroups.value = true
+  try {
+    const response = await consumerGroupApi.list({ page_size: 100 })
+    const data = response.data
+    if (data.list) {
+      consumerGroupList.value = data.list.map(item => {
+        const value = item.value || {}
+        let id = value.id
+        if (!id && item.key) {
+          const parts = item.key.split('/')
+          id = parts[parts.length - 1]
+        }
+        return {
+          ...value,
+          id: id || item.key
+        }
+      })
+    } else {
+      consumerGroupList.value = []
+    }
+  } catch (error) {
+    consumerGroupList.value = []
+  } finally {
+    loadingGroups.value = false
+  }
+}
+
+// 加载消费者列表
 const loadData = async () => {
   loading.value = true
   try {
@@ -161,7 +325,6 @@ const loadData = async () => {
     })
     const data = response.data
     if (data.list) {
-      // 先映射基本数据
       const consumers = data.list.map(item => ({
         ...item.value,
         username: item.value.username || item.key,
@@ -169,7 +332,6 @@ const loadData = async () => {
         update_time: item.value.update_time || item.update_time
       }))
       
-      // 为每个消费者检查 Basic Auth 凭证
       const consumersWithAuth = await Promise.all(
         consumers.map(async (consumer) => {
           try {
@@ -182,7 +344,6 @@ const loadData = async () => {
               }
             )
             
-            // 检查是否有 basic-auth 凭证
             const hasBasicAuth = credResponse.data?.list?.some(
               item => item.value?.plugins?.['basic-auth']
             ) || false
@@ -192,7 +353,6 @@ const loadData = async () => {
               hasBasicAuth
             }
           } catch (error) {
-            // 如果获取凭证失败（可能是没有凭证），返回 false
             return {
               ...consumer,
               hasBasicAuth: false
@@ -214,6 +374,48 @@ const loadData = async () => {
   }
 }
 
+// 加载消费者组列表
+const loadGroupData = async () => {
+  groupLoading.value = true
+  try {
+    const response = await consumerGroupApi.list({
+      page: groupPagination.value.page,
+      page_size: groupPagination.value.pageSize
+    })
+    const data = response.data
+    if (data.list) {
+      groupList.value = data.list.map(item => {
+        const value = item.value || {}
+        let id = value.id
+        if (!id && item.key) {
+          const parts = item.key.split('/')
+          id = parts[parts.length - 1]
+        }
+        return {
+          ...value,
+          id: id || item.key,
+          create_time: value.create_time || item.create_time,
+          update_time: value.update_time || item.update_time
+        }
+      })
+      groupPagination.value.total = data.total || 0
+    } else {
+      groupList.value = []
+      groupPagination.value.total = 0
+    }
+  } catch (error) {
+    // 错误消息已由拦截器自动显示
+  } finally {
+    groupLoading.value = false
+  }
+}
+
+const handleTabChange = (tabName) => {
+  if (tabName === 'group') {
+    loadGroupData()
+  }
+}
+
 const handleSizeChange = (size) => {
   pagination.value.pageSize = size
   pagination.value.page = 1
@@ -225,17 +427,40 @@ const handlePageChange = (page) => {
   loadData()
 }
 
+const handleGroupSizeChange = (size) => {
+  groupPagination.value.pageSize = size
+  groupPagination.value.page = 1
+  loadGroupData()
+}
+
+const handleGroupPageChange = (page) => {
+  groupPagination.value.page = page
+  loadGroupData()
+}
+
 const handleAdd = () => {
-  dialogTitle.value = '创建消费者'
-  isEdit.value = false
-  form.value = {
-    username: '',
-    desc: '',
-    authUsername: '',
-    password: ''
+  if (activeTab.value === 'consumer') {
+    dialogTitle.value = '创建消费者'
+    isEdit.value = false
+    form.value = {
+      username: '',
+      desc: '',
+      group_id: '',
+      authUsername: '',
+      password: ''
+    }
+    enableBasicAuth.value = false
+    dialogVisible.value = true
+  } else {
+    groupDialogTitle.value = '创建消费者组'
+    isGroupEdit.value = false
+    groupForm.value = {
+      id: generateRandomId(),
+      name: '',
+      desc: ''
+    }
+    groupDialogVisible.value = true
   }
-  enableBasicAuth.value = false
-  dialogVisible.value = true
 }
 
 const handleEdit = async (row) => {
@@ -248,11 +473,11 @@ const handleEdit = async (row) => {
     form.value = {
       username: data.username || row.username,
       desc: data.desc || '',
+      group_id: data.group_id || '',
       authUsername: '',
       password: ''
     }
     
-    // 检查是否有 Basic Auth 凭证（通过 Credential API）
     try {
       const credResponse = await axios.get(
         `${config.baseURL}/apisix/admin/consumers/${form.value.username}/credentials`,
@@ -263,7 +488,6 @@ const handleEdit = async (row) => {
         }
       )
       
-      // 查找 basic-auth 凭证
       if (credResponse.data?.list && credResponse.data.list.length > 0) {
         const basicAuthCred = credResponse.data.list.find(
           item => item.value?.plugins?.['basic-auth']
@@ -273,7 +497,6 @@ const handleEdit = async (row) => {
           enableBasicAuth.value = true
           const basicAuth = basicAuthCred.value.plugins['basic-auth']
           form.value.authUsername = basicAuth.username || ''
-          // 密码不能回显，留空
           form.value.password = ''
         } else {
           enableBasicAuth.value = false
@@ -282,11 +505,27 @@ const handleEdit = async (row) => {
         enableBasicAuth.value = false
       }
     } catch (error) {
-      // 如果没有凭证或获取失败，说明未启用
       enableBasicAuth.value = false
     }
     
     dialogVisible.value = true
+  } catch (error) {
+    // 错误消息已由拦截器自动显示
+  }
+}
+
+const handleGroupEdit = async (row) => {
+  groupDialogTitle.value = '编辑消费者组'
+  isGroupEdit.value = true
+  try {
+    const response = await consumerGroupApi.get(row.id)
+    const data = response.data.value
+    groupForm.value = {
+      id: data.id || row.id,
+      name: data.name || '',
+      desc: data.desc || ''
+    }
+    groupDialogVisible.value = true
   } catch (error) {
     // 错误消息已由拦截器自动显示
   }
@@ -301,27 +540,24 @@ const handleSubmit = async () => {
     try {
       const config = getConfig()
       
-      // 构建消费者数据（不包含 Basic Auth 配置）
       const consumerData = {
         username: form.value.username,
-        desc: form.value.desc || undefined
+        desc: form.value.desc || undefined,
+        group_id: form.value.group_id || undefined
       }
 
-      // 创建或更新消费者
       if (isEdit.value) {
         await consumerApi.update(form.value.username, consumerData)
       } else {
         await consumerApi.create(form.value.username, consumerData)
       }
 
-      // 如果启用了 Basic Auth，通过 Credential API 配置
       if (enableBasicAuth.value) {
         if (!form.value.password) {
           ElMessage.warning('启用 Basic Auth 时必须输入密码')
           return
         }
 
-        // 使用 Credential API 配置 Basic Auth
         const credentialData = {
           id: `cred-${form.value.username}-basic-auth`,
           plugins: {
@@ -343,14 +579,11 @@ const handleSubmit = async () => {
             }
           )
         } catch (error) {
-          // 直接使用 axios 的请求需要手动显示错误
           ElMessage.error(getErrorMessage(error, '配置 Basic Auth 凭证失败'))
           throw error
         }
       } else if (isEdit.value) {
-        // 如果编辑时取消了 Basic Auth，尝试删除凭证
         try {
-          // 先获取现有的凭证列表
           const credResponse = await axios.get(
             `${config.baseURL}/apisix/admin/consumers/${form.value.username}/credentials`,
             {
@@ -360,11 +593,9 @@ const handleSubmit = async () => {
             }
           )
           
-          // 删除所有 basic-auth 凭证
           if (credResponse.data?.list && credResponse.data.list.length > 0) {
             for (const item of credResponse.data.list) {
               const credId = item.value?.id || item.key
-              // 检查是否是 basic-auth 凭证
               if (item.value?.plugins?.['basic-auth'] || credId.includes('basic-auth')) {
                 try {
                   await axios.delete(
@@ -382,7 +613,6 @@ const handleSubmit = async () => {
             }
           }
         } catch (error) {
-          // 如果凭证不存在或获取失败，忽略错误
           console.warn('获取或删除 Basic Auth 凭证失败:', error)
         }
       }
@@ -390,6 +620,36 @@ const handleSubmit = async () => {
       ElMessage.success(isEdit.value ? '更新成功' : '创建成功')
       dialogVisible.value = false
       loadData()
+      loadConsumerGroups() // 刷新消费者组列表，以便选择器更新
+    } catch (error) {
+      // 错误消息已由拦截器自动显示
+    }
+  })
+}
+
+const handleGroupSubmit = async () => {
+  if (!groupFormRef.value) return
+  
+  await groupFormRef.value.validate(async (valid) => {
+    if (!valid) return
+
+    try {
+      const groupData = {
+        plugins: {}, // 暂时不需要配置插件
+        name: groupForm.value.name || undefined,
+        desc: groupForm.value.desc || undefined
+      }
+
+      if (isGroupEdit.value) {
+        await consumerGroupApi.update(groupForm.value.id, groupData)
+      } else {
+        await consumerGroupApi.create(groupForm.value.id, groupData)
+      }
+
+      ElMessage.success(isGroupEdit.value ? '更新成功' : '创建成功')
+      groupDialogVisible.value = false
+      loadGroupData()
+      loadConsumerGroups() // 刷新消费者组列表，以便选择器更新
     } catch (error) {
       // 错误消息已由拦截器自动显示
     }
@@ -409,13 +669,32 @@ const handleDelete = async (row) => {
   }
 }
 
+const handleGroupDelete = async (row) => {
+  try {
+    await ElMessageBox.confirm('确定要删除这个消费者组吗？', '提示', {
+      type: 'warning'
+    })
+    await consumerGroupApi.delete(row.id)
+    ElMessage.success('删除成功')
+    loadGroupData()
+    loadConsumerGroups() // 刷新消费者组列表
+  } catch (error) {
+    // 错误消息已由拦截器自动显示（用户取消操作除外）
+  }
+}
+
 const resetForm = () => {
   formRef.value?.resetFields()
   enableBasicAuth.value = false
   form.value.authUsername = ''
 }
 
+const resetGroupForm = () => {
+  groupFormRef.value?.resetFields()
+}
+
 onMounted(() => {
+  loadConsumerGroups()
   loadData()
 })
 </script>
@@ -431,5 +710,11 @@ onMounted(() => {
   align-items: center;
   font-size: 18px;
   font-weight: 600;
+}
+
+.form-tip {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 5px;
 }
 </style>

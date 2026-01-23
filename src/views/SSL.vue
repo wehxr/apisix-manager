@@ -92,7 +92,7 @@
     >
       <el-form :model="form" label-width="120px" ref="formRef" :rules="rules">
         <el-form-item label="证书 ID" prop="id">
-          <el-input v-model="form.id" placeholder="自动生成或手动输入" />
+          <el-input v-model="form.id" placeholder="请输入证书 ID" />
         </el-form-item>
 
         <el-form-item label="证书状态" prop="status">
@@ -197,6 +197,7 @@ const form = ref({
 })
 
 const rules = {
+  id: [{ required: true, message: '请输入证书 ID', trigger: 'blur' }],
   snis: [{ required: true, message: '请输入域名', trigger: 'change' }],
   cert: [{ required: true, message: '请输入证书内容', trigger: 'blur' }],
   key: [{ required: true, message: '请输入私钥内容', trigger: 'blur' }]
@@ -244,7 +245,7 @@ const handlePageChange = (page) => {
 const handleAdd = () => {
   dialogTitle.value = '添加证书'
   form.value = {
-    id: Date.now().toString(),
+    id: '',
     snis: [],
     desc: '',
     cert: '',
