@@ -4,20 +4,23 @@
       <template #header>
         <div class="card-header">
           <span>消费者管理</span>
-          <el-button type="primary" @click="handleAdd">
-            <el-icon><Plus /></el-icon>
-            {{ activeTab === 'consumer' ? '创建消费者' : '创建消费者组' }}
-          </el-button>
         </div>
       </template>
 
-      <el-tabs v-model="activeTab" @tab-change="handleTabChange">
+      <el-tabs v-model="activeTab" @tab-change="handleTabChange" :tab-position="tabPosition" class="consumer-tabs">
         <el-tab-pane label="消费者" name="consumer">
-          <el-table :data="consumerList" v-loading="loading" style="width: 100%">
+          <div class="action-bar">
+            <el-button type="primary" @click="handleAdd" class="create-btn">
+              <el-icon><Plus /></el-icon>
+              <span class="btn-text">创建消费者</span>
+            </el-button>
+          </div>
+          <div class="table-wrapper">
+            <el-table :data="consumerList" v-loading="loading" style="width: 100%">
             <el-table-column prop="username" label="用户名"/>
-            <el-table-column prop="group_id" label="消费者组ID" width="150">
+            <el-table-column prop="group_id" label="消费者组" width="150">
               <template #default="{ row }">
-                <el-tag v-if="row.group_id" type="info" size="small">{{ row.group_id }}</el-tag>
+                <el-tag v-if="row.group_id" type="info" size="small">{{ getGroupName(row.group_id) }}</el-tag>
                 <span v-else style="color: #909399">-</span>
               </template>
             </el-table-column>
@@ -45,15 +48,16 @@
               </template>
             </el-table-column>
           </el-table>
+          </div>
 
           <!-- 分页 -->
-          <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
+          <div class="pagination-wrapper">
             <el-pagination
               v-model:current-page="pagination.page"
               v-model:page-size="pagination.pageSize"
               :page-sizes="[10, 20, 50, 100]"
               :total="pagination.total"
-              layout="total, sizes, prev, pager, next, jumper"
+              :layout="paginationLayout"
               @size-change="handleSizeChange"
               @current-change="handlePageChange"
             />
@@ -61,8 +65,14 @@
         </el-tab-pane>
 
         <el-tab-pane label="消费者组" name="group">
-          <el-table :data="groupList" v-loading="groupLoading" style="width: 100%">
-              <el-table-column prop="id" label="ID"/>
+          <div class="action-bar">
+            <el-button type="primary" @click="handleAdd" class="create-btn">
+              <el-icon><Plus /></el-icon>
+              <span class="btn-text">创建消费者组</span>
+            </el-button>
+          </div>
+          <div class="table-wrapper">
+            <el-table :data="groupList" v-loading="groupLoading" style="width: 100%">
             <el-table-column prop="name" label="名称" width="200">
               <template #default="{ row }">
                 <span>{{ row.name || '-' }}</span>
@@ -86,15 +96,16 @@
               </template>
             </el-table-column>
           </el-table>
+          </div>
 
           <!-- 分页 -->
-          <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
+          <div class="pagination-wrapper">
             <el-pagination
               v-model:current-page="groupPagination.page"
               v-model:page-size="groupPagination.pageSize"
               :page-sizes="[10, 20, 50, 100]"
               :total="groupPagination.total"
-              layout="total, sizes, prev, pager, next, jumper"
+              :layout="groupPaginationLayout"
               @size-change="handleGroupSizeChange"
               @current-change="handleGroupPageChange"
             />
@@ -107,7 +118,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
-      width="600px"
+      :width="dialogWidth"
       @close="resetForm"
     >
       <el-form :model="form" label-width="120px" ref="formRef" :rules="rules">
@@ -149,6 +160,12 @@
           </el-select>
           <div class="form-tip">Consumer Group 用于配置一组可以在 Consumer 间复用的插件</div>
         </el-form-item>
+        <el-form-item label="标签" prop="labels">
+          <LabelsInput
+            v-model="form.labels"
+          />
+          <div class="form-tip">可选，用于标记和分类消费者</div>
+        </el-form-item>
         <el-divider>Basic Auth 配置</el-divider>
         <el-form-item label="启用 Basic Auth">
           <el-switch v-model="enableBasicAuth" />
@@ -181,7 +198,7 @@
     <el-dialog
       v-model="groupDialogVisible"
       :title="groupDialogTitle"
-      width="600px"
+      :width="dialogWidth"
       @close="resetGroupForm"
     >
       <el-form :model="groupForm" label-width="120px" ref="groupFormRef" :rules="groupRules">
@@ -199,6 +216,12 @@
             placeholder="请输入描述信息（可选）"
           />
         </el-form-item>
+        <el-form-item label="标签" prop="labels">
+          <LabelsInput
+            v-model="groupForm.labels"
+          />
+          <div class="form-tip">可选，用于标记和分类消费者组</div>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="groupDialogVisible = false">取消</el-button>
@@ -213,8 +236,46 @@ import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { consumerApi, consumerGroupApi, getConfig, getErrorMessage } from '../utils/api'
-import { formatTimestamp } from '../utils/format'
+import { formatTimestamp, getDialogWidth } from '../utils/format'
 import axios from 'axios'
+import LabelsInput from '../components/LabelsInput.vue'
+
+// 响应式标签页位置
+const tabPosition = computed(() => {
+  if (typeof window === 'undefined') {
+    return 'left'
+  }
+  return window.innerWidth < 768 ? 'top' : 'left'
+})
+
+// 响应式分页布局
+const paginationLayout = computed(() => {
+  if (typeof window === 'undefined') {
+    return 'total, sizes, prev, pager, next, jumper'
+  }
+  const screenWidth = window.innerWidth
+  if (screenWidth < 768) {
+    return 'prev, pager, next'
+  } else if (screenWidth < 1024) {
+    return 'total, prev, pager, next'
+  } else {
+    return 'total, sizes, prev, pager, next, jumper'
+  }
+})
+
+const groupPaginationLayout = computed(() => {
+  if (typeof window === 'undefined') {
+    return 'total, sizes, prev, pager, next, jumper'
+  }
+  const screenWidth = window.innerWidth
+  if (screenWidth < 768) {
+    return 'prev, pager, next'
+  } else if (screenWidth < 1024) {
+    return 'total, prev, pager, next'
+  } else {
+    return 'total, sizes, prev, pager, next, jumper'
+  }
+})
 
 // 生成随机 ID
 const generateRandomId = () => {
@@ -227,6 +288,7 @@ const groupLoading = ref(false)
 const consumerList = ref([])
 const groupList = ref([])
 const dialogVisible = ref(false)
+const dialogWidth = computed(() => getDialogWidth())
 const groupDialogVisible = ref(false)
 const dialogTitle = ref('创建消费者')
 const groupDialogTitle = ref('创建消费者组')
@@ -256,13 +318,15 @@ const form = ref({
   desc: '',
   group_id: '',
   authUsername: '',
-  password: ''
+  password: '',
+  labels: {}
 })
 
 const groupForm = ref({
   id: '',
   name: '',
-  desc: ''
+  desc: '',
+  labels: {}
 })
 
 const rules = {
@@ -312,6 +376,13 @@ const loadConsumerGroups = async () => {
   } finally {
     loadingGroups.value = false
   }
+}
+
+// 根据 group_id 获取消费者组名字
+const getGroupName = (groupId) => {
+  if (!groupId) return ''
+  const group = consumerGroupList.value.find(g => g.id === groupId)
+  return group?.name || groupId
 }
 
 // 加载消费者列表
@@ -447,7 +518,8 @@ const handleAdd = () => {
       desc: '',
       group_id: '',
       authUsername: '',
-      password: ''
+      password: '',
+      labels: {}
     }
     enableBasicAuth.value = false
     dialogVisible.value = true
@@ -457,7 +529,8 @@ const handleAdd = () => {
     groupForm.value = {
       id: generateRandomId(),
       name: '',
-      desc: ''
+      desc: '',
+      labels: {}
     }
     groupDialogVisible.value = true
   }
@@ -475,7 +548,8 @@ const handleEdit = async (row) => {
       desc: data.desc || '',
       group_id: data.group_id || '',
       authUsername: '',
-      password: ''
+      password: '',
+      labels: data.labels || row.labels || {}
     }
     
     try {
@@ -523,7 +597,8 @@ const handleGroupEdit = async (row) => {
     groupForm.value = {
       id: data.id || row.id,
       name: data.name || '',
-      desc: data.desc || ''
+      desc: data.desc || '',
+      labels: data.labels || row.labels || {}
     }
     groupDialogVisible.value = true
   } catch (error) {
@@ -544,6 +619,11 @@ const handleSubmit = async () => {
         username: form.value.username,
         desc: form.value.desc || undefined,
         group_id: form.value.group_id || undefined
+      }
+
+      // 添加标签
+      if (form.value.labels && typeof form.value.labels === 'object' && Object.keys(form.value.labels).length > 0) {
+        consumerData.labels = form.value.labels
       }
 
       if (isEdit.value) {
@@ -640,6 +720,11 @@ const handleGroupSubmit = async () => {
         desc: groupForm.value.desc || undefined
       }
 
+      // 添加标签
+      if (groupForm.value.labels && typeof groupForm.value.labels === 'object' && Object.keys(groupForm.value.labels).length > 0) {
+        groupData.labels = groupForm.value.labels
+      }
+
       if (isGroupEdit.value) {
         await consumerGroupApi.update(groupForm.value.id, groupData)
       } else {
@@ -710,11 +795,110 @@ onMounted(() => {
   align-items: center;
   font-size: 18px;
   font-weight: 600;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.consumer-tabs {
+  min-height: 400px;
+}
+
+.action-bar {
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.create-btn .btn-text {
+  margin-left: 4px;
+}
+
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pagination-wrapper {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+  overflow-x: auto;
 }
 
 .form-tip {
   font-size: 12px;
   color: #909399;
   margin-top: 5px;
+  display: block; 
+  width: 100%;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .card-header {
+    font-size: 16px;
+  }
+
+  .create-btn .btn-text {
+    display: none;
+  }
+
+  .table-wrapper {
+    margin: 0 -12px;
+    padding: 0 12px;
+  }
+
+  .pagination-wrapper {
+    justify-content: center;
+  }
+
+  :deep(.consumer-tabs .el-tabs__header) {
+    margin-bottom: 16px;
+  }
+
+  :deep(.consumer-tabs .el-tabs__item) {
+    padding: 0 12px;
+    font-size: 14px;
+  }
+
+  :deep(.el-table) {
+    font-size: 12px;
+  }
+
+  :deep(.el-table th),
+  :deep(.el-table td) {
+    padding: 8px 4px;
+  }
+
+  :deep(.el-button--small) {
+    padding: 5px 8px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .card-header {
+    font-size: 14px;
+  }
+
+  :deep(.consumer-tabs .el-tabs__item) {
+    padding: 0 8px;
+    font-size: 12px;
+  }
+
+  :deep(.el-table) {
+    font-size: 11px;
+  }
+
+  :deep(.el-table th),
+  :deep(.el-table td) {
+    padding: 6px 2px;
+  }
+
+  :deep(.el-button--small) {
+    padding: 4px 6px;
+    font-size: 11px;
+  }
 }
 </style>

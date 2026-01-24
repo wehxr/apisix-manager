@@ -7,6 +7,17 @@
         </div>
       </template>
       <div class="settings-content">
+        <el-alert
+          title="提示"
+          type="info"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 24px;"
+        >
+          <template #default>
+            <span>这些配置信息仅保存在浏览器本地存储中，不会上传到服务器。清除浏览器数据或更换浏览器后需要重新配置。</span>
+          </template>
+        </el-alert>
         <el-form :model="form" label-width="150px" class="settings-form">
           <el-form-item label="APISIX 地址">
             <el-input 

@@ -4,14 +4,15 @@
       <template #header>
         <div class="card-header">
           <span>SSL 证书管理</span>
-          <el-button type="primary" @click="handleAdd">
+          <el-button type="primary" @click="handleAdd" class="create-btn">
             <el-icon><Plus /></el-icon>
-            添加证书
+            <span class="btn-text">添加证书</span>
           </el-button>
         </div>
       </template>
 
-      <el-table :data="sslList" v-loading="loading" style="width: 100%">
+      <div class="table-wrapper">
+        <el-table :data="sslList" v-loading="loading" style="width: 100%">
         <el-table-column prop="id" label="ID" width="150" />
         <el-table-column prop="snis" label="域名" min-width="250">
           <template #default="{ row }">
@@ -68,15 +69,16 @@
           </template>
         </el-table-column>
       </el-table>
+      </div>
 
       <!-- 分页 -->
-      <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
+      <div class="pagination-wrapper">
         <el-pagination
           v-model:current-page="pagination.page"
           v-model:page-size="pagination.pageSize"
           :page-sizes="[10, 20, 50, 100]"
           :total="pagination.total"
-          layout="total, sizes, prev, pager, next, jumper"
+          :layout="paginationLayout"
           @size-change="handleSizeChange"
           @current-change="handlePageChange"
         />
@@ -87,7 +89,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
-      width="800px"
+      :width="dialogWidth"
       @close="resetForm"
     >
       <el-form :model="form" label-width="120px" ref="formRef" :rules="rules">
@@ -138,6 +140,12 @@
             placeholder="请输入描述信息（可选）"
           />
         </el-form-item>
+        <el-form-item label="标签" prop="labels">
+          <LabelsInput
+            v-model="form.labels"
+          />
+          <div class="form-tip">可选，用于标记和分类证书</div>
+        </el-form-item>
         <el-form-item label="证书内容" prop="cert">
           <el-input
             v-model="form.cert"
@@ -169,9 +177,26 @@ import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { sslApi } from '../utils/api'
-import { formatTimestamp } from '../utils/format'
+import { formatTimestamp, getDialogWidth } from '../utils/format'
+import LabelsInput from '../components/LabelsInput.vue'
+
+// 响应式分页布局
+const paginationLayout = computed(() => {
+  if (typeof window === 'undefined') {
+    return 'total, sizes, prev, pager, next, jumper'
+  }
+  const screenWidth = window.innerWidth
+  if (screenWidth < 768) {
+    return 'prev, pager, next'
+  } else if (screenWidth < 1024) {
+    return 'total, prev, pager, next'
+  } else {
+    return 'total, sizes, prev, pager, next, jumper'
+  }
+})
 
 const loading = ref(false)
+const dialogWidth = computed(() => getDialogWidth())
 const sslList = ref([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('添加证书')
@@ -193,7 +218,8 @@ const form = ref({
   key: '',
   ssl_protocols: ['TLSv1.2', 'TLSv1.3'],
   status: 1,
-  type: 'server'
+  type: 'server',
+  labels: {}
 })
 
 const rules = {
@@ -252,7 +278,8 @@ const handleAdd = () => {
     key: '',
     ssl_protocols: ['TLSv1.2', 'TLSv1.3'],
     status: 1,
-    type: 'server'
+    type: 'server',
+    labels: {}
   }
   dialogVisible.value = true
 }
@@ -267,7 +294,8 @@ const handleEdit = (row) => {
     key: row.key || '',
     ssl_protocols: row.ssl_protocols || ['TLSv1.2', 'TLSv1.3'],
     status: row.status !== undefined ? row.status : 1,
-    type: 'server'
+    type: 'server',
+    labels: row.labels || {}
   }
   dialogVisible.value = true
 }
@@ -301,6 +329,11 @@ const handleSubmit = async () => {
       // 添加 SSL 协议配置
       if (form.value.ssl_protocols && form.value.ssl_protocols.length > 0) {
         sslData.ssl_protocols = form.value.ssl_protocols
+      }
+      
+      // 添加标签
+      if (form.value.labels && typeof form.value.labels === 'object' && Object.keys(form.value.labels).length > 0) {
+        sslData.labels = form.value.labels
       }
       
       if (dialogTitle.value === '添加证书') {
@@ -352,11 +385,86 @@ onMounted(() => {
   align-items: center;
   font-size: 18px;
   font-weight: 600;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.create-btn .btn-text {
+  margin-left: 4px;
+}
+
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pagination-wrapper {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+  overflow-x: auto;
 }
 
 .form-tip {
   font-size: 12px;
   color: #909399;
   margin-top: 5px;
+  display: block; 
+  width: 100%;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .card-header {
+    font-size: 16px;
+  }
+
+  .create-btn .btn-text {
+    display: none;
+  }
+
+  .table-wrapper {
+    margin: 0 -12px;
+    padding: 0 12px;
+  }
+
+  .pagination-wrapper {
+    justify-content: center;
+  }
+
+  :deep(.el-table) {
+    font-size: 12px;
+  }
+
+  :deep(.el-table th),
+  :deep(.el-table td) {
+    padding: 8px 4px;
+  }
+
+  :deep(.el-button--small) {
+    padding: 5px 8px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .card-header {
+    font-size: 14px;
+  }
+
+  :deep(.el-table) {
+    font-size: 11px;
+  }
+
+  :deep(.el-table th),
+  :deep(.el-table td) {
+    padding: 6px 2px;
+  }
+
+  :deep(.el-button--small) {
+    padding: 4px 6px;
+    font-size: 11px;
+  }
 }
 </style>

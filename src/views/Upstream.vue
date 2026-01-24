@@ -4,15 +4,15 @@
       <template #header>
         <div class="card-header">
           <span>上游服务器管理</span>
-          <el-button type="primary" @click="handleAdd">
+          <el-button type="primary" @click="handleAdd" class="create-btn">
             <el-icon><Plus /></el-icon>
-            添加上游
+            <span class="btn-text">添加上游</span>
           </el-button>
         </div>
       </template>
 
-      <el-table :data="upstreamList" v-loading="loading" style="width: 100%">
-        <el-table-column prop="id" label="ID" width="180" show-overflow-tooltip />
+      <div class="table-wrapper">
+        <el-table :data="upstreamList" v-loading="loading" style="width: 100%">
         <el-table-column prop="name" label="名称" width="200" />
         <el-table-column prop="nodes" label="节点" width="200" >
           <template #default="{ row }">
@@ -82,15 +82,16 @@
           </template>
         </el-table-column>
       </el-table>
+      </div>
 
       <!-- 分页 -->
-      <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
+      <div class="pagination-wrapper">
         <el-pagination
           v-model:current-page="pagination.page"
           v-model:page-size="pagination.pageSize"
           :page-sizes="[10, 20, 50, 100]"
           :total="pagination.total"
-          layout="total, sizes, prev, pager, next, jumper"
+          :layout="paginationLayout"
           @size-change="handleSizeChange"
           @current-change="handlePageChange"
         />
@@ -101,13 +102,22 @@
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
-      width="1000px"
+      :width="dialogWidth"
       @close="resetForm"
     >
       <el-form :model="form" label-width="140px" ref="formRef" :rules="rules">
-        <el-tabs v-model="activeTab" type="border-card">
-          <!-- 基础配置 -->
-          <el-tab-pane label="基础配置" name="basic">
+        <!-- 步骤条 -->
+        <el-steps :active="currentStep" finish-status="success" align-center style="margin-bottom: 30px;">
+          <el-step title="基础配置" description="配置上游基本信息" />
+          <el-step title="节点配置" description="配置上游节点" />
+          <el-step title="超时配置" description="配置超时和重试" />
+          <el-step title="健康检测" description="配置健康检测（可选）" />
+        </el-steps>
+
+        <!-- 步骤内容 -->
+        <div class="step-content">
+          <!-- 步骤 1: 基础配置 -->
+          <div v-show="currentStep === 0">
             <el-form-item label="名称" prop="name">
               <el-input v-model="form.name" placeholder="请输入上游服务名称" />
             </el-form-item>
@@ -149,17 +159,15 @@
           </el-form-item>
         </template>
             <el-form-item label="标签" prop="labels">
-              <el-input
-                v-model="labelsInput"
-                placeholder="多个标签用逗号分隔，如: env:prod,version:v1"
-                @blur="handleLabelsInput"
+              <LabelsInput
+                v-model="form.labels"
               />
-              <div class="form-tip">多个标签用逗号分隔，格式：key:value</div>
+              <div class="form-tip">可选，用于标记和分类上游服务</div>
             </el-form-item>
-          </el-tab-pane>
+          </div>
 
-          <!-- 节点配置 -->
-          <el-tab-pane label="节点配置" name="nodes">
+          <!-- 步骤 2: 节点配置 -->
+          <div v-show="currentStep === 1">
             <el-form-item label="上游节点" prop="nodes" required>
               <el-table :data="nodeList" border style="width: 100%">
                 <el-table-column label="节点地址" min-width="300">
@@ -259,10 +267,10 @@
               />
               <div class="form-tip">连接池中每个连接的最大请求数，默认 1000</div>
             </el-form-item>
-          </el-tab-pane>
+          </div>
 
-          <!-- 超时配置 -->
-          <el-tab-pane label="超时配置" name="timeout">
+          <!-- 步骤 3: 超时配置 -->
+          <div v-show="currentStep === 2">
             <el-form-item label="连接超时" prop="timeout.connect">
               <el-input-number
                 v-model="form.timeout.connect"
@@ -313,10 +321,10 @@
               />
               <div class="form-tip">单位：秒，重试的超时时间，默认 6 秒</div>
             </el-form-item>
-          </el-tab-pane>
+          </div>
 
-          <!-- 主动健康检测 -->
-          <el-tab-pane label="主动健康检测" name="healthcheck">
+          <!-- 步骤 4: 健康检测 -->
+          <div v-show="currentStep === 3">
             <el-form-item label="启用健康检测">
               <el-switch v-model="enableHealthCheck" />
             </el-form-item>
@@ -426,34 +434,53 @@
                 <div class="form-tip">连续失败次数达到此值，节点被标记为不健康，默认 3</div>
               </el-form-item>
             </template>
-          </el-tab-pane>
-        </el-tabs>
+          </div>
+        </div>
+
+        <!-- 步骤导航按钮 -->
+        <div class="step-actions">
+          <el-button v-if="currentStep > 0" @click="prevStep">上一步</el-button>
+          <el-button v-if="currentStep < 3" type="primary" @click="nextStep">下一步</el-button>
+          <el-button v-if="currentStep === 3" type="primary" @click="handleSubmit">确认</el-button>
+        </div>
       </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSubmit">确定</el-button>
-      </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import { upstreamApi } from '../utils/api'
-import { formatTimestamp } from '../utils/format'
+import { formatTimestamp, getDialogWidth } from '../utils/format'
+import LabelsInput from '../components/LabelsInput.vue'
+
+// 响应式分页布局
+const paginationLayout = computed(() => {
+  if (typeof window === 'undefined') {
+    return 'total, sizes, prev, pager, next, jumper'
+  }
+  const screenWidth = window.innerWidth
+  if (screenWidth < 768) {
+    return 'prev, pager, next'
+  } else if (screenWidth < 1024) {
+    return 'total, prev, pager, next'
+  } else {
+    return 'total, sizes, prev, pager, next, jumper'
+  }
+})
 
 const loading = ref(false)
+const dialogWidth = computed(() => getDialogWidth())
 const upstreamList = ref([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('添加上游')
 const isEdit = ref(false)
 const formRef = ref(null)
 const nodeList = ref([{ host: '', weight: 100 }])
-const activeTab = ref('basic')
+const currentStep = ref(0)
 const enableHealthCheck = ref(false)
-const labelsInput = ref('')
 
 // 分页配置
 const pagination = ref({
@@ -510,20 +537,6 @@ const rules = {
   type: [{ required: true, message: '请选择负载均衡类型', trigger: 'blur' }]
 }
 
-const handleLabelsInput = () => {
-  if (labelsInput.value) {
-    const labels = {}
-    labelsInput.value.split(',').forEach(item => {
-      const [key, value] = item.trim().split(':')
-      if (key && value) {
-        labels[key.trim()] = value.trim()
-      }
-    })
-    form.value.labels = Object.keys(labels).length > 0 ? labels : undefined
-  } else {
-    form.value.labels = undefined
-  }
-}
 
 const loadData = async () => {
   loading.value = true
@@ -581,7 +594,7 @@ const handleAdd = () => {
     type: 'roundrobin',
     scheme: 'http',
     nodes: {},
-    labels: undefined,
+    labels: {},
     timeout: {
       connect: 3,
       send: 6,
@@ -619,9 +632,8 @@ const handleAdd = () => {
     }
   }
   nodeList.value = [{ host: '', weight: 100 }]
-  labelsInput.value = ''
   enableHealthCheck.value = false
-  activeTab.value = 'basic'
+  currentStep.value = 0
   dialogVisible.value = true
 }
 
@@ -682,14 +694,6 @@ const handleEdit = (row) => {
     nodeList.value = [{ host: '', weight: 100 }]
   }
 
-  // 处理标签
-  if (row.labels && Object.keys(row.labels).length > 0) {
-    labelsInput.value = Object.entries(row.labels)
-      .map(([key, value]) => `${key}:${value}`)
-      .join(', ')
-  } else {
-    labelsInput.value = ''
-  }
 
   // 检查是否启用了健康检测
   enableHealthCheck.value = !!(row.checks?.active)
@@ -747,7 +751,7 @@ const handleEdit = (row) => {
     }
   }
   
-  activeTab.value = 'basic'
+  currentStep.value = 0
   dialogVisible.value = true
 }
 
@@ -810,7 +814,7 @@ const handleSubmit = async () => {
     }
 
     // 添加标签
-    if (form.value.labels && Object.keys(form.value.labels).length > 0) {
+    if (form.value.labels && typeof form.value.labels === 'object' && Object.keys(form.value.labels).length > 0) {
       upstreamData.labels = form.value.labels
     }
 
@@ -921,9 +925,38 @@ const handleDelete = async (row) => {
 const resetForm = () => {
   formRef.value?.resetFields()
   nodeList.value = [{ host: '', weight: 100 }]
-  labelsInput.value = ''
   enableHealthCheck.value = false
-  activeTab.value = 'basic'
+  currentStep.value = 0
+}
+
+// 步骤导航
+const nextStep = async () => {
+  // 验证当前步骤
+  if (currentStep.value === 0) {
+    // 验证基础配置
+    try {
+      await formRef.value.validateField('name')
+      await formRef.value.validateField('type')
+    } catch (error) {
+      return
+    }
+  } else if (currentStep.value === 1) {
+    // 验证节点配置
+    if (!nodeList.value || nodeList.value.length === 0 || !nodeList.value.some(n => n.host)) {
+      ElMessage.warning('请至少配置一个有效的上游节点')
+      return
+    }
+  }
+  
+  if (currentStep.value < 3) {
+    currentStep.value++
+  }
+}
+
+const prevStep = () => {
+  if (currentStep.value > 0) {
+    currentStep.value--
+  }
 }
 
 onMounted(() => {
@@ -942,19 +975,134 @@ onMounted(() => {
   align-items: center;
   font-size: 18px;
   font-weight: 600;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.create-btn .btn-text {
+  margin-left: 4px;
+}
+
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pagination-wrapper {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+  overflow-x: auto;
 }
 
 .form-tip {
   font-size: 12px;
   color: #909399;
   margin-top: 5px;
+  display: block; 
+  width: 100%;
 }
 
-:deep(.el-tabs__content) {
+.step-content {
+  min-height: 400px;
+  padding: 20px 0;
+  background: #fafafa;
+  border-radius: 8px;
+  padding: 30px;
+}
+
+.step-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid #ebeef5;
+}
+
+:deep(.el-steps) {
+  background: #fff;
   padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 :deep(.el-form-item) {
   margin-bottom: 20px;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .card-header {
+    font-size: 16px;
+  }
+
+  .create-btn .btn-text {
+    display: none;
+  }
+
+  .table-wrapper {
+    margin: 0 -12px;
+    padding: 0 12px;
+  }
+
+  .pagination-wrapper {
+    justify-content: center;
+  }
+
+  .step-content {
+    padding: 20px 12px;
+  }
+
+  :deep(.el-steps) {
+    padding: 12px;
+  }
+
+  :deep(.el-steps .el-step__title) {
+    font-size: 12px;
+  }
+
+  :deep(.el-steps .el-step__description) {
+    font-size: 11px;
+  }
+
+  :deep(.el-table) {
+    font-size: 12px;
+  }
+
+  :deep(.el-table th),
+  :deep(.el-table td) {
+    padding: 8px 4px;
+  }
+
+  :deep(.el-button--small) {
+    padding: 5px 8px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .card-header {
+    font-size: 14px;
+  }
+
+  .step-content {
+    padding: 16px 8px;
+  }
+
+  :deep(.el-table) {
+    font-size: 11px;
+  }
+
+  :deep(.el-table th),
+  :deep(.el-table td) {
+    padding: 6px 2px;
+  }
+
+  :deep(.el-button--small) {
+    padding: 4px 6px;
+    font-size: 11px;
+  }
 }
 </style>

@@ -19,3 +19,20 @@ export function formatTimestamp(timestamp) {
   
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
 }
+
+// 计算对话框动态宽度
+export function getDialogWidth() {
+  if (typeof window === 'undefined') {
+    return '65%'
+  }
+  const screenWidth = window.innerWidth
+  if (screenWidth < 768) {
+    return '95%' // 移动端
+  } else if (screenWidth < 1024) {
+    return '85%' // 平板
+  } else if (screenWidth < 1440) {
+    return '65%' // 小桌面
+  } else {
+    return '55%' // 大桌面
+  }
+}
