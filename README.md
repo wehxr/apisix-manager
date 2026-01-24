@@ -18,6 +18,22 @@
 - Axios
 - Vite
 
+## 截图展示
+
+### SSL 证书管理
+![SSL 证书管理](./images/ssl.png)
+
+### 消费者管理
+![消费者管理](./images/consumer.png)
+
+### 上游服务器管理
+![上游服务器管理](./images/upstream.png)
+
+### 路由管理
+![路由管理](./images/route.png)
+
+
+
 ## 快速开始
 
 ### 安装依赖
