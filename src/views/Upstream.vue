@@ -111,7 +111,7 @@
           <el-step title="基础配置" description="配置上游基本信息" />
           <el-step title="节点配置" description="配置上游节点" />
           <el-step title="超时配置" description="配置超时和重试" />
-          <el-step title="健康检测" description="配置健康检测（可选）" />
+          <el-step title="健康检测" description="配置健康检测" />
         </el-steps>
 
         <!-- 步骤内容 -->
@@ -343,7 +343,7 @@
                 />
                 <div class="form-tip">
                   <span v-if="form.checks.active.type === 'tcp'">TCP 检测的主机地址，留空则使用上游节点的主机名</span>
-                  <span v-else>HTTP/HTTPS 检测时用于设置请求的 Host 头，留空则使用上游节点的主机名</span>
+                  <span v-else>HTTP/HTTPS 检测时用于设置请求的 Host 头，留空则使用上游节点的主机名, 如: www.example.com</span>
                 </div>
               </el-form-item>
               <el-form-item label="检测端口" prop="checks.active.port" v-if="form.checks.active.type === 'tcp'">
@@ -394,6 +394,10 @@
                   <el-option label="204" :value="204" />
                   <el-option label="301" :value="301" />
                   <el-option label="302" :value="302" />
+                  <el-option label="400" :value="400" />
+                  <el-option label="403" :value="403" />
+                  <el-option label="404" :value="404" />
+                  <el-option label="405" :value="405" />
                 </el-select>
                 <div class="form-tip">默认: [200, 302]</div>
               </el-form-item>

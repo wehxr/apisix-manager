@@ -32,7 +32,6 @@
     <el-button
       type="primary"
       :icon="Plus"
-      size="small"
       text
       @click="addLabel"
       class="add-label-btn"
