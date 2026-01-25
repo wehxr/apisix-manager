@@ -69,20 +69,24 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { isPluginEnabled, setPluginEnabled } from '../../utils/plugin'
+import { usePluginConfig } from '../../composables/usePluginConfig'
 
 const props = defineProps({
   modelValue: {
     type: Object,
     default: () => ({
-      plugins: {}
+      plugin_config_id: null
     })
   }
 })
 
 const emit = defineEmits(['update:modelValue'])
 
+// 使用 composable 加载和管理 Plugin Config
+const { plugins, updatePlugins } = usePluginConfig(props, emit)
+
 // 从 plugins 中提取 real-ip 配置
-const realIpPlugin = computed(() => props.modelValue.plugins?.['real-ip'] || {})
+const realIpPlugin = computed(() => plugins.value['real-ip'] || {})
 
 // 计算 enabled 状态
 const enabled = computed(() => isPluginEnabled(realIpPlugin.value))
@@ -128,12 +132,10 @@ watch([enabled, trustedAddresses], ([newEnabled, newTrustedAddresses]) => {
 
 // 监听内部状态变化，更新到父组件
 watch(localEnabled, (newEnabled) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
   if (newEnabled) {
-    currentConfig.plugins['real-ip'] = {
+    currentPlugins['real-ip'] = {
       source: source.value || 'http_x_forwarded_for'
     }
     
@@ -144,30 +146,30 @@ watch(localEnabled, (newEnabled) => {
         .map(s => s.trim())
         .filter(s => s)
       if (addresses.length > 0) {
-        currentConfig.plugins['real-ip'].trusted_addresses = addresses
+        currentPlugins['real-ip'].trusted_addresses = addresses
       }
     }
     
     // 添加 recursive 配置（如果为 true，false 时可以不添加，但为了明确性还是添加）
-    currentConfig.plugins['real-ip'].recursive = recursive.value !== undefined ? recursive.value : false
+    currentPlugins['real-ip'].recursive = recursive.value !== undefined ? recursive.value : false
     
-    setPluginEnabled(currentConfig.plugins['real-ip'], true)
+    setPluginEnabled(currentPlugins['real-ip'], true)
   } else {
     // 禁用时保留所有配置，只是设置 _meta.disable = true
-    currentConfig.plugins['real-ip'] = {
+    currentPlugins['real-ip'] = {
       ...realIpPlugin.value,
       source: source.value || 'http_x_forwarded_for'
     }
     if (trustedAddresses.value.length > 0) {
-      currentConfig.plugins['real-ip'].trusted_addresses = trustedAddresses.value
+      currentPlugins['real-ip'].trusted_addresses = trustedAddresses.value
     }
     if (recursive.value !== undefined) {
-      currentConfig.plugins['real-ip'].recursive = recursive.value
+      currentPlugins['real-ip'].recursive = recursive.value
     }
-    setPluginEnabled(currentConfig.plugins['real-ip'], false)
+    setPluginEnabled(currentPlugins['real-ip'], false)
   }
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 })
 
 const handleEnableChange = (value) => {
@@ -176,17 +178,15 @@ const handleEnableChange = (value) => {
 
 // 更新插件的辅助函数
 const updatePlugin = (updates) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
-  currentConfig.plugins['real-ip'] = {
+  currentPlugins['real-ip'] = {
     ...realIpPlugin.value,
     ...updates
   }
-  setPluginEnabled(currentConfig.plugins['real-ip'], enabled.value)
+  setPluginEnabled(currentPlugins['real-ip'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleSourceChange = (value) => {
@@ -198,12 +198,10 @@ const handleTrustedAddressesInput = (value) => {
 }
 
 const handleTrustedAddressesBlur = () => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
   if (localEnabled.value) {
-    currentConfig.plugins['real-ip'] = {
+    currentPlugins['real-ip'] = {
       ...realIpPlugin.value,
       source: source.value || 'http_x_forwarded_for'
     }
@@ -215,28 +213,28 @@ const handleTrustedAddressesBlur = () => {
         .map(s => s.trim())
         .filter(s => s)
       if (addresses.length > 0) {
-        currentConfig.plugins['real-ip'].trusted_addresses = addresses
+        currentPlugins['real-ip'].trusted_addresses = addresses
       } else {
         // 如果清空了所有地址，删除该字段
-        delete currentConfig.plugins['real-ip'].trusted_addresses
+        delete currentPlugins['real-ip'].trusted_addresses
       }
     } else {
       // 如果输入为空，删除该字段
-      delete currentConfig.plugins['real-ip'].trusted_addresses
+      delete currentPlugins['real-ip'].trusted_addresses
     }
     
     // 确保 recursive 字段存在
     if (recursive.value !== undefined) {
-      currentConfig.plugins['real-ip'].recursive = recursive.value
+      currentPlugins['real-ip'].recursive = recursive.value
     }
     
-    setPluginEnabled(currentConfig.plugins['real-ip'], true)
+    setPluginEnabled(currentPlugins['real-ip'], true)
   } else {
-    currentConfig.plugins['real-ip'] = currentConfig.plugins['real-ip'] || {}
-    setPluginEnabled(currentConfig.plugins['real-ip'], false)
+    currentPlugins['real-ip'] = currentPlugins['real-ip'] || {}
+    setPluginEnabled(currentPlugins['real-ip'], false)
   }
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleRecursiveChange = (value) => {

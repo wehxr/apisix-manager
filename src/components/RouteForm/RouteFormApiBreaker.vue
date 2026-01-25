@@ -25,9 +25,9 @@
           :max="599"
           style="width: 100%"
         />
-        <div class="form-tip">当断路器打开时返回的 HTTP 状态码</div>
+        <div class="form-tip">当断路器打开时返回的 HTTP 状态码, 端口范围: 200-599</div>
       </el-form-item>
-      <el-form-item label="断路器响应体">
+      <el-form-item label="断路器响应体" required>
         <el-input
           :model-value="breakResponseBody"
           @update:model-value="handleBreakBodyChange"
@@ -60,16 +60,16 @@
         <el-button type="primary" link @click="addHeader">+ 添加响应头</el-button>
         <div class="form-tip">可选，熔断时返回的 HTTP 响应头；仅当配置了「断路器响应体」时生效，value 可含 Nginx 变量如 $remote_addr</div>
       </el-form-item>
-      <el-form-item label="不健康状态码">
+      <el-form-item label="不健康状态码" required>
         <el-input
           :model-value="unhealthyStatusesInput"
           @update:model-value="handleUnhealthyStatusesInput"
           @blur="handleBlur"
           placeholder="多个状态码用逗号分隔，如: 500, 502, 503"
         />
-        <div class="form-tip">触发不健康状态检测的 HTTP 状态码，多个状态码用逗号分隔</div>
+        <div class="form-tip">触发不健康状态检测的 HTTP 状态码，多个状态码用逗号分隔; 端口范围: 500-599</div>
       </el-form-item>
-      <el-form-item label="失败阈值">
+      <el-form-item label="失败阈值" required>
         <el-input-number
           :model-value="unhealthy.failures"
           @update:model-value="handleUnhealthyFailuresChange"
@@ -79,16 +79,16 @@
         />
         <div class="form-tip">连续失败次数，达到此值后断路器打开</div>
       </el-form-item>
-      <el-form-item label="健康状态码">
+      <el-form-item label="健康状态码" required>
         <el-input
           :model-value="healthyStatusesInput"
           @update:model-value="handleHealthyStatusesInput"
           @blur="handleBlur"
           placeholder="多个状态码用逗号分隔，如: 200, 201, 202"
         />
-        <div class="form-tip">表示服务恢复的 HTTP 状态码，多个状态码用逗号分隔</div>
+        <div class="form-tip">表示服务恢复的 HTTP 状态码，多个状态码用逗号分隔; 端口范围: 200-499</div>
       </el-form-item>
-      <el-form-item label="恢复成功次数">
+      <el-form-item label="恢复成功次数" required>
         <el-input-number
           :model-value="healthy.successes"
           @update:model-value="handleHealthySuccessesChange"
@@ -98,7 +98,7 @@
         />
         <div class="form-tip">连续成功次数，达到此值后断路器关闭</div>
       </el-form-item>
-      <el-form-item label="熔断最大持续时间（秒）">
+      <el-form-item label="熔断最大持续时间（秒）" required>
         <el-input-number
           :model-value="maxBreakerSec"
           @update:model-value="handleMaxBreakerSecChange"
@@ -115,20 +115,24 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { isPluginEnabled, setPluginEnabled } from '../../utils/plugin'
+import { usePluginConfig } from '../../composables/usePluginConfig'
 
 const props = defineProps({
   modelValue: {
     type: Object,
     default: () => ({
-      plugins: {}
+      plugin_config_id: null
     })
   }
 })
 
 const emit = defineEmits(['update:modelValue'])
 
+// 使用 composable 加载和管理 Plugin Config
+const { plugins, updatePlugins } = usePluginConfig(props, emit)
+
 // 从 plugins 中提取 api-breaker 配置
-const apiBreakerPlugin = computed(() => props.modelValue.plugins?.['api-breaker'] || {})
+const apiBreakerPlugin = computed(() => plugins.value['api-breaker'] || {})
 
 // 计算 enabled 状态
 const enabled = computed(() => isPluginEnabled(apiBreakerPlugin.value))
@@ -203,19 +207,17 @@ watch([enabled, unhealthy, healthy, breakResponseHeaders], ([newEnabled, newUnhe
 
 // 监听内部状态变化，更新到父组件
 watch(localEnabled, (newEnabled) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
   if (newEnabled) {
-    currentConfig.plugins['api-breaker'] = buildPluginConfig()
-    setPluginEnabled(currentConfig.plugins['api-breaker'], true)
+    currentPlugins['api-breaker'] = buildPluginConfig()
+    setPluginEnabled(currentPlugins['api-breaker'], true)
   } else {
-    currentConfig.plugins['api-breaker'] = currentConfig.plugins['api-breaker'] || {}
-    setPluginEnabled(currentConfig.plugins['api-breaker'], false)
+    currentPlugins['api-breaker'] = currentPlugins['api-breaker'] || {}
+    setPluginEnabled(currentPlugins['api-breaker'], false)
   }
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 })
 
 function buildPluginConfig(overrides = {}) {
@@ -234,10 +236,10 @@ function buildPluginConfig(overrides = {}) {
 }
 
 function emitPluginConfig(overrides = {}) {
-  const currentConfig = { plugins: { ...props.modelValue.plugins } }
-  currentConfig.plugins['api-breaker'] = buildPluginConfig(overrides)
-  setPluginEnabled(currentConfig.plugins['api-breaker'], enabled.value)
-  emit('update:modelValue', currentConfig)
+  const currentPlugins = { ...plugins.value }
+  currentPlugins['api-breaker'] = buildPluginConfig(overrides)
+  setPluginEnabled(currentPlugins['api-breaker'], enabled.value)
+  updatePlugins(currentPlugins)
 }
 
 const handleEnableChange = (value) => {

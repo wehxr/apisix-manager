@@ -116,20 +116,24 @@
 import { ref, watch, computed } from 'vue'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import { isPluginEnabled, setPluginEnabled } from '../../utils/plugin'
+import { usePluginConfig } from '../../composables/usePluginConfig'
 
 const props = defineProps({
   modelValue: {
     type: Object,
     default: () => ({
-      plugins: {}
+      plugin_config_id: null
     })
   }
 })
 
 const emit = defineEmits(['update:modelValue'])
 
+// 使用 composable 加载和管理 Plugin Config
+const { plugins, updatePlugins } = usePluginConfig(props, emit)
+
 // 从 plugins 中提取 cors 配置
-const corsPlugin = computed(() => props.modelValue.plugins?.cors || {})
+const corsPlugin = computed(() => plugins.value.cors || {})
 
 // 计算 enabled 状态
 const enabled = computed(() => isPluginEnabled(corsPlugin.value))
@@ -221,49 +225,47 @@ watch([enabled, origins, methods, allowHeaders, exposeHeaders, maxAge, allowCred
 
 // 监听内部状态变化，更新到父组件
 watch(localEnable, (newEnabled) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
   if (newEnabled) {
-    currentConfig.plugins.cors = {}
-    setPluginEnabled(currentConfig.plugins.cors, true)
+    currentPlugins.cors = {}
+    setPluginEnabled(currentPlugins.cors, true)
     
     // 设置各个字段
     if (originsInput.value && originsInput.value.trim()) {
-      currentConfig.plugins.cors.allow_origins = originsInput.value.trim()
+      currentPlugins.cors.allow_origins = originsInput.value.trim()
     } else if (!allowCredentialValue.value) {
-      currentConfig.plugins.cors.allow_origins = '*'
+      currentPlugins.cors.allow_origins = '*'
     }
     
     if (methodsValue.value && methodsValue.value.length > 0) {
-      currentConfig.plugins.cors.allow_methods = methodsValue.value.join(',')
+      currentPlugins.cors.allow_methods = methodsValue.value.join(',')
     } else {
-      currentConfig.plugins.cors.allow_methods = 'GET, POST, PUT, DELETE, OPTIONS, HEAD'
+      currentPlugins.cors.allow_methods = 'GET, POST, PUT, DELETE, OPTIONS, HEAD'
     }
     
     if (allowHeadersInput.value && allowHeadersInput.value.trim()) {
-      currentConfig.plugins.cors.allow_headers = allowHeadersInput.value.trim()
+      currentPlugins.cors.allow_headers = allowHeadersInput.value.trim()
     } else {
-      currentConfig.plugins.cors.allow_headers = 'Content-Type, Authorization, X-Requested-With, X-CSRF-Token'
+      currentPlugins.cors.allow_headers = 'Content-Type, Authorization, X-Requested-With, X-CSRF-Token'
     }
     
     if (exposeHeadersInput.value && exposeHeadersInput.value.trim()) {
-      currentConfig.plugins.cors.expose_headers = exposeHeadersInput.value.trim()
+      currentPlugins.cors.expose_headers = exposeHeadersInput.value.trim()
     }
     
-    currentConfig.plugins.cors.max_age = maxAgeValue.value !== undefined ? maxAgeValue.value : 1728000
-    currentConfig.plugins.cors.allow_credential = allowCredentialValue.value
+    currentPlugins.cors.max_age = maxAgeValue.value !== undefined ? maxAgeValue.value : 1728000
+    currentPlugins.cors.allow_credential = allowCredentialValue.value
     
     if (allowOriginsByRegexList.value && allowOriginsByRegexList.value.length > 0) {
-      currentConfig.plugins.cors.allow_origins_by_regex = allowOriginsByRegexList.value.filter(r => r && r.trim())
+      currentPlugins.cors.allow_origins_by_regex = allowOriginsByRegexList.value.filter(r => r && r.trim())
     }
   } else {
-    currentConfig.plugins.cors = currentConfig.plugins.cors || {}
-    setPluginEnabled(currentConfig.plugins.cors, false)
+    currentPlugins.cors = currentPlugins.cors || {}
+    setPluginEnabled(currentPlugins.cors, false)
   }
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 })
 
 const handleEnableChange = (value) => {
@@ -309,46 +311,44 @@ const removeRegex = (idx) => {
 }
 
 const handleBlur = () => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
   if (localEnable.value) {
-    currentConfig.plugins.cors = {}
-    setPluginEnabled(currentConfig.plugins.cors, true)
+    currentPlugins.cors = {}
+    setPluginEnabled(currentPlugins.cors, true)
     
     // 设置各个字段
     if (originsInput.value && originsInput.value.trim()) {
-      currentConfig.plugins.cors.allow_origins = originsInput.value.trim()
+      currentPlugins.cors.allow_origins = originsInput.value.trim()
     } else if (!allowCredentialValue.value) {
-      currentConfig.plugins.cors.allow_origins = '*'
+      currentPlugins.cors.allow_origins = '*'
     }
     
     if (methodsValue.value && methodsValue.value.length > 0) {
-      currentConfig.plugins.cors.allow_methods = methodsValue.value.join(',')
+      currentPlugins.cors.allow_methods = methodsValue.value.join(',')
     } else {
-      currentConfig.plugins.cors.allow_methods = 'GET, POST, PUT, DELETE, OPTIONS, HEAD'
+      currentPlugins.cors.allow_methods = 'GET, POST, PUT, DELETE, OPTIONS, HEAD'
     }
     
     if (allowHeadersInput.value && allowHeadersInput.value.trim()) {
-      currentConfig.plugins.cors.allow_headers = allowHeadersInput.value.trim()
+      currentPlugins.cors.allow_headers = allowHeadersInput.value.trim()
     } else {
-      currentConfig.plugins.cors.allow_headers = 'Content-Type, Authorization, X-Requested-With, X-CSRF-Token'
+      currentPlugins.cors.allow_headers = 'Content-Type, Authorization, X-Requested-With, X-CSRF-Token'
     }
     
     if (exposeHeadersInput.value && exposeHeadersInput.value.trim()) {
-      currentConfig.plugins.cors.expose_headers = exposeHeadersInput.value.trim()
+      currentPlugins.cors.expose_headers = exposeHeadersInput.value.trim()
     }
     
-    currentConfig.plugins.cors.max_age = maxAgeValue.value !== undefined ? maxAgeValue.value : 1728000
-    currentConfig.plugins.cors.allow_credential = allowCredentialValue.value
+    currentPlugins.cors.max_age = maxAgeValue.value !== undefined ? maxAgeValue.value : 1728000
+    currentPlugins.cors.allow_credential = allowCredentialValue.value
     
     if (allowOriginsByRegexList.value && allowOriginsByRegexList.value.length > 0) {
-      currentConfig.plugins.cors.allow_origins_by_regex = allowOriginsByRegexList.value.filter(r => r && r.trim())
+      currentPlugins.cors.allow_origins_by_regex = allowOriginsByRegexList.value.filter(r => r && r.trim())
     }
   }
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 </script>
 

@@ -198,4 +198,19 @@ export const routeApi = {
   delete: (id) => api.delete(`/apisix/admin/routes/${id}`)
 }
 
+// Plugin Config 管理
+export const pluginConfigApi = {
+  list: (params = {}) => {
+    const queryParams = new URLSearchParams()
+    if (params.page) queryParams.append('page', params.page)
+    if (params.page_size) queryParams.append('page_size', params.page_size)
+    const queryString = queryParams.toString()
+    return api.get(`/apisix/admin/plugin_configs${queryString ? '?' + queryString : ''}`)
+  },
+  get: (id) => api.get(`/apisix/admin/plugin_configs/${id}`),
+  create: (id, data) => api.put(`/apisix/admin/plugin_configs/${id}`, data),
+  update: (id, data) => api.put(`/apisix/admin/plugin_configs/${id}`, data),
+  delete: (id) => api.delete(`/apisix/admin/plugin_configs/${id}`)
+}
+
 export default api

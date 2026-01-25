@@ -28,7 +28,7 @@
         />
         <div class="form-tip">每行一个正则表达式模式，匹配的 URI 将被阻止</div>
       </el-form-item>
-      <el-form-item label="拒绝状态码">
+      <el-form-item label="拒绝状态码" required>
         <el-input-number
           :model-value="rejectedCode"
           @update:model-value="handleRejectedCodeChange"
@@ -57,20 +57,24 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { isPluginEnabled, setPluginEnabled } from '../../utils/plugin'
+import { usePluginConfig } from '../../composables/usePluginConfig'
 
 const props = defineProps({
   modelValue: {
     type: Object,
     default: () => ({
-      plugins: {}
+      plugin_config_id: null
     })
   }
 })
 
 const emit = defineEmits(['update:modelValue'])
 
+// 使用 composable 加载和管理 Plugin Config
+const { plugins, updatePlugins } = usePluginConfig(props, emit)
+
 // 从 plugins 中提取 uri-blocker 配置
-const uriBlockerPlugin = computed(() => props.modelValue.plugins?.['uri-blocker'] || {})
+const uriBlockerPlugin = computed(() => plugins.value['uri-blocker'] || {})
 
 // 计算 enabled 状态
 const enabled = computed(() => isPluginEnabled(uriBlockerPlugin.value))
@@ -86,7 +90,7 @@ const rejectedCode = computed(() => {
 })
 
 const rejectedMsg = computed(() => {
-  return uriBlockerPlugin.value.rejected_msg || '访问被拒绝，您没有权限访问此路由'
+  return uriBlockerPlugin.value.rejected_msg || '访问被拒绝，您没有权限访问'
 })
 
 const caseInsensitive = computed(() => {
@@ -111,24 +115,22 @@ watch([enabled, blockRules], ([newEnabled, newBlockRules]) => {
 
 // 监听内部状态变化，更新到父组件
 watch(localEnabled, (newEnabled) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
   if (newEnabled) {
-    currentConfig.plugins['uri-blocker'] = {
+    currentPlugins['uri-blocker'] = {
       block_rules: blockRules.value,
       rejected_code: rejectedCode.value,
       rejected_msg: rejectedMsg.value,
       case_insensitive: caseInsensitive.value
     }
-    setPluginEnabled(currentConfig.plugins['uri-blocker'], true)
+    setPluginEnabled(currentPlugins['uri-blocker'], true)
   } else {
-    currentConfig.plugins['uri-blocker'] = currentConfig.plugins['uri-blocker'] || {}
-    setPluginEnabled(currentConfig.plugins['uri-blocker'], false)
+    currentPlugins['uri-blocker'] = currentPlugins['uri-blocker'] || {}
+    setPluginEnabled(currentPlugins['uri-blocker'], false)
   }
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 })
 
 const handleEnableChange = (value) => {
@@ -140,67 +142,59 @@ const handleBlockRulesInput = (value) => {
 }
 
 const handleRejectedCodeChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
-  currentConfig.plugins['uri-blocker'] = {
+  currentPlugins['uri-blocker'] = {
     ...uriBlockerPlugin.value,
     rejected_code: value
   }
-  setPluginEnabled(currentConfig.plugins['uri-blocker'], enabled.value)
+  setPluginEnabled(currentPlugins['uri-blocker'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleRejectedMsgChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
-  currentConfig.plugins['uri-blocker'] = {
+  currentPlugins['uri-blocker'] = {
     ...uriBlockerPlugin.value,
     rejected_msg: value
   }
-  setPluginEnabled(currentConfig.plugins['uri-blocker'], enabled.value)
+  setPluginEnabled(currentPlugins['uri-blocker'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleCaseInsensitiveChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
-  currentConfig.plugins['uri-blocker'] = {
+  currentPlugins['uri-blocker'] = {
     ...uriBlockerPlugin.value,
     case_insensitive: value
   }
-  setPluginEnabled(currentConfig.plugins['uri-blocker'], enabled.value)
+  setPluginEnabled(currentPlugins['uri-blocker'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleBlur = () => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
   if (blockRulesInput.value && blockRulesInput.value.trim()) {
     const rules = blockRulesInput.value.split('\n').map(s => s.trim()).filter(s => s)
-    currentConfig.plugins['uri-blocker'] = {
+    currentPlugins['uri-blocker'] = {
       ...uriBlockerPlugin.value,
       block_rules: rules
     }
   } else {
-    currentConfig.plugins['uri-blocker'] = {
+    currentPlugins['uri-blocker'] = {
       ...uriBlockerPlugin.value,
       block_rules: []
     }
   }
-  setPluginEnabled(currentConfig.plugins['uri-blocker'], enabled.value)
+  setPluginEnabled(currentPlugins['uri-blocker'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 </script>
 

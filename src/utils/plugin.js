@@ -2,18 +2,20 @@
 
 // 插件名称翻译映射
 export const PLUGIN_NAMES = {
-  'request-id': '请求ID',
+  'request-id': '生成请求ID',
   'basic-auth': '基本认证',
   'ip-restriction': 'IP 限制',
   'cors': '跨域配置',
   'real-ip': '真实IP透传',
   'redirect': '重定向',
-  'limit-req': '请求限流',
+  'gzip': 'Gzip压缩', 
   'proxy-cache': '代理缓存',
   'client-control': '限制请求体大小',
   'uri-blocker': 'URI拦截',
   'api-breaker': 'API熔断',
-  'gzip': 'Gzip压缩'
+  'limit-req': '请求速率限流',
+  'limit-count': '请求数限流',
+  'limit-conn': '并发连接数限制',
 }
 
 // 获取插件的中文名称

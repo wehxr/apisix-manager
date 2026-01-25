@@ -71,20 +71,24 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { isPluginEnabled, setPluginEnabled } from '../../utils/plugin'
+import { usePluginConfig } from '../../composables/usePluginConfig'
 
 const props = defineProps({
   modelValue: {
     type: Object,
     default: () => ({
-      plugins: {}
+      plugin_config_id: null
     })
   }
 })
 
 const emit = defineEmits(['update:modelValue'])
 
+// 使用 composable 加载和管理 Plugin Config
+const { plugins, updatePlugins } = usePluginConfig(props, emit)
+
 // 从 plugins 中提取 request-id 配置
-const requestIdPlugin = computed(() => props.modelValue.plugins?.['request-id'] || {})
+const requestIdPlugin = computed(() => plugins.value['request-id'] || {})
 
 // 计算 enabled 状态
 const enabled = computed(() => isPluginEnabled(requestIdPlugin.value))
@@ -125,31 +129,29 @@ watch(enabled, (newEnabled) => {
 
 // 监听内部状态变化，更新到父组件
 watch(localEnabled, (newEnabled) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
   if (newEnabled) {
-    currentConfig.plugins['request-id'] = {
+    currentPlugins['request-id'] = {
       header_name: headerName.value,
       include_in_response: includeInResponse.value,
       algorithm: algorithm.value
     }
     
     if (algorithm.value === 'range_id') {
-      currentConfig.plugins['request-id'].range_id = {
+      currentPlugins['request-id'].range_id = {
         char_set: rangeIdCharSet.value,
         length: rangeIdLength.value
       }
     }
     
-    setPluginEnabled(currentConfig.plugins['request-id'], true)
+    setPluginEnabled(currentPlugins['request-id'], true)
   } else {
-    currentConfig.plugins['request-id'] = currentConfig.plugins['request-id'] || {}
-    setPluginEnabled(currentConfig.plugins['request-id'], false)
+    currentPlugins['request-id'] = currentPlugins['request-id'] || {}
+    setPluginEnabled(currentPlugins['request-id'], false)
   }
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 })
 
 const handleEnableChange = (value) => {
@@ -157,37 +159,31 @@ const handleEnableChange = (value) => {
 }
 
 const handleHeaderNameChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
-  currentConfig.plugins['request-id'] = {
+  currentPlugins['request-id'] = {
     ...requestIdPlugin.value,
     header_name: value || 'X-Request-Id'
   }
-  setPluginEnabled(currentConfig.plugins['request-id'], enabled.value)
+  setPluginEnabled(currentPlugins['request-id'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleIncludeInResponseChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
-  currentConfig.plugins['request-id'] = {
+  currentPlugins['request-id'] = {
     ...requestIdPlugin.value,
     include_in_response: value
   }
-  setPluginEnabled(currentConfig.plugins['request-id'], enabled.value)
+  setPluginEnabled(currentPlugins['request-id'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleAlgorithmChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
   const newConfig = {
     ...requestIdPlugin.value,
@@ -205,44 +201,40 @@ const handleAlgorithmChange = (value) => {
     delete newConfig.range_id
   }
   
-  currentConfig.plugins['request-id'] = newConfig
-  setPluginEnabled(currentConfig.plugins['request-id'], enabled.value)
+  currentPlugins['request-id'] = newConfig
+  setPluginEnabled(currentPlugins['request-id'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleRangeIdCharSetChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
-  currentConfig.plugins['request-id'] = {
+  currentPlugins['request-id'] = {
     ...requestIdPlugin.value,
     range_id: {
       ...(requestIdPlugin.value.range_id || {}),
       char_set: value || 'abcdefghijklmnopqrstuvwxyzABCDEFGHIGKLMNOPQRSTUVWXYZ0123456789'
     }
   }
-  setPluginEnabled(currentConfig.plugins['request-id'], enabled.value)
+  setPluginEnabled(currentPlugins['request-id'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleRangeIdLengthChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
-  currentConfig.plugins['request-id'] = {
+  currentPlugins['request-id'] = {
     ...requestIdPlugin.value,
     range_id: {
       ...(requestIdPlugin.value.range_id || {}),
       length: value || 16
     }
   }
-  setPluginEnabled(currentConfig.plugins['request-id'], enabled.value)
+  setPluginEnabled(currentPlugins['request-id'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 </script>
 

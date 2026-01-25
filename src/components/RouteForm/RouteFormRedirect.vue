@@ -171,20 +171,24 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { isPluginEnabled, setPluginEnabled } from '../../utils/plugin'
+import { usePluginConfig } from '../../composables/usePluginConfig'
 
 const props = defineProps({
   modelValue: {
     type: Object,
     default: () => ({
-      plugins: {}
+      plugin_config_id: null
     })
   }
 })
 
 const emit = defineEmits(['update:modelValue'])
 
+// 使用 composable 加载和管理 Plugin Config
+const { plugins, updatePlugins } = usePluginConfig(props, emit)
+
 // 从 plugins 中提取 redirect 配置
-const redirectPlugin = computed(() => props.modelValue.plugins?.['redirect'] || {})
+const redirectPlugin = computed(() => plugins.value['redirect'] || {})
 
 // 计算 enabled 状态
 const enabled = computed(() => isPluginEnabled(redirectPlugin.value))
@@ -254,9 +258,7 @@ watch(enabled, (newEnabled) => {
 
 // 监听内部状态变化，更新到父组件
 watch(localEnabled, (newEnabled) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
   if (newEnabled) {
     // 根据当前重定向类型构建配置
@@ -289,14 +291,14 @@ watch(localEnabled, (newEnabled) => {
       redirectConfig.append_query_string = appendQueryString.value || false
     }
     
-    currentConfig.plugins['redirect'] = redirectConfig
-    setPluginEnabled(currentConfig.plugins['redirect'], true)
+    currentPlugins['redirect'] = redirectConfig
+    setPluginEnabled(currentPlugins['redirect'], true)
   } else {
-    currentConfig.plugins['redirect'] = currentConfig.plugins['redirect'] || {}
-    setPluginEnabled(currentConfig.plugins['redirect'], false)
+    currentPlugins['redirect'] = currentPlugins['redirect'] || {}
+    setPluginEnabled(currentPlugins['redirect'], false)
   }
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 })
 
 const handleEnableChange = (value) => {
@@ -304,12 +306,10 @@ const handleEnableChange = (value) => {
 }
 
 const handleRedirectTypeChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
   // 根据类型设置配置，确保互斥字段不设置（而不是设置为空）
-  currentConfig.plugins['redirect'] = {
+  currentPlugins['redirect'] = {
     ret_code: 302,
     encode_uri: false,
     append_query_string: false
@@ -318,134 +318,122 @@ const handleRedirectTypeChange = (value) => {
   // 根据类型设置配置
   if (value === 'uri') {
     // uri 模式：只设置 uri，不设置 regex_uri 和 http_to_https
-    currentConfig.plugins['redirect'].uri = uri.value || ''
-    currentConfig.plugins['redirect'].ret_code = retCode.value || 302
-    currentConfig.plugins['redirect'].encode_uri = encodeUri.value || false
-    currentConfig.plugins['redirect'].append_query_string = appendQueryString.value || false
+    currentPlugins['redirect'].uri = uri.value || ''
+    currentPlugins['redirect'].ret_code = retCode.value || 302
+    currentPlugins['redirect'].encode_uri = encodeUri.value || false
+    currentPlugins['redirect'].append_query_string = appendQueryString.value || false
   } else if (value === 'regex_uri') {
     // regex_uri 模式：只设置 regex_uri，不设置 uri（避免验证错误）和 http_to_https
-    currentConfig.plugins['redirect'].regex_uri = regexUri.value && Array.isArray(regexUri.value) && regexUri.value.length > 0
+    currentPlugins['redirect'].regex_uri = regexUri.value && Array.isArray(regexUri.value) && regexUri.value.length > 0
       ? regexUri.value
       : ['', '']
-    currentConfig.plugins['redirect'].ret_code = retCode.value || 302
-    currentConfig.plugins['redirect'].encode_uri = encodeUri.value || false
-    currentConfig.plugins['redirect'].append_query_string = appendQueryString.value || false
+    currentPlugins['redirect'].ret_code = retCode.value || 302
+    currentPlugins['redirect'].encode_uri = encodeUri.value || false
+    currentPlugins['redirect'].append_query_string = appendQueryString.value || false
   } else if (value === 'http_to_https') {
     // http_to_https 模式：只设置 http_to_https，不设置 uri 和 regex_uri
-    currentConfig.plugins['redirect'].http_to_https = true
-    currentConfig.plugins['redirect'].ret_code = 301
+    currentPlugins['redirect'].http_to_https = true
+    currentPlugins['redirect'].ret_code = 301
     // 明确不设置 append_query_string，因为文档说明不能同时配置
   }
   
-  setPluginEnabled(currentConfig.plugins['redirect'], enabled.value)
-  emit('update:modelValue', currentConfig)
+  setPluginEnabled(currentPlugins['redirect'], enabled.value)
+  updatePlugins(currentPlugins)
 }
 
 const handleUriChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
   // 使用 uri 模式时，删除互斥字段而不是设置为空
-  currentConfig.plugins['redirect'] = {
+  currentPlugins['redirect'] = {
     ...redirectPlugin.value,
     uri: value
   }
   // 删除互斥字段
-  delete currentConfig.plugins['redirect'].regex_uri
-  delete currentConfig.plugins['redirect'].http_to_https
+  delete currentPlugins['redirect'].regex_uri
+  delete currentPlugins['redirect'].http_to_https
   
-  setPluginEnabled(currentConfig.plugins['redirect'], enabled.value)
+  setPluginEnabled(currentPlugins['redirect'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleRegexPatternChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
   const currentRegexUri = regexUri.value || []
   // 使用 regex_uri 模式时，删除互斥字段而不是设置为空
-  currentConfig.plugins['redirect'] = {
+  currentPlugins['redirect'] = {
     ...redirectPlugin.value,
     regex_uri: [value, currentRegexUri[1] || '']
   }
   // 删除互斥字段，避免 APISIX 验证错误
-  delete currentConfig.plugins['redirect'].uri
-  delete currentConfig.plugins['redirect'].http_to_https
+  delete currentPlugins['redirect'].uri
+  delete currentPlugins['redirect'].http_to_https
   
-  setPluginEnabled(currentConfig.plugins['redirect'], enabled.value)
+  setPluginEnabled(currentPlugins['redirect'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleRegexTemplateChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
   const currentRegexUri = regexUri.value || []
   // 使用 regex_uri 模式时，删除互斥字段而不是设置为空
-  currentConfig.plugins['redirect'] = {
+  currentPlugins['redirect'] = {
     ...redirectPlugin.value,
     regex_uri: [currentRegexUri[0] || '', value]
   }
   // 删除互斥字段，避免 APISIX 验证错误
-  delete currentConfig.plugins['redirect'].uri
-  delete currentConfig.plugins['redirect'].http_to_https
+  delete currentPlugins['redirect'].uri
+  delete currentPlugins['redirect'].http_to_https
   
-  setPluginEnabled(currentConfig.plugins['redirect'], enabled.value)
+  setPluginEnabled(currentPlugins['redirect'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleCodeChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
-  currentConfig.plugins['redirect'] = {
+  currentPlugins['redirect'] = {
     ...redirectPlugin.value,
     ret_code: value
   }
-  setPluginEnabled(currentConfig.plugins['redirect'], enabled.value)
+  setPluginEnabled(currentPlugins['redirect'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleEncodeUriChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
-  currentConfig.plugins['redirect'] = {
+  currentPlugins['redirect'] = {
     ...redirectPlugin.value,
     encode_uri: value
   }
-  setPluginEnabled(currentConfig.plugins['redirect'], enabled.value)
+  setPluginEnabled(currentPlugins['redirect'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleAppendQueryStringChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
   // 如果启用 append_query_string，删除 http_to_https（文档要求不能同时配置）
-  currentConfig.plugins['redirect'] = {
+  currentPlugins['redirect'] = {
     ...redirectPlugin.value,
     append_query_string: value
   }
   // 如果启用 append_query_string，删除互斥的 http_to_https 字段
   if (value) {
-    delete currentConfig.plugins['redirect'].http_to_https
+    delete currentPlugins['redirect'].http_to_https
   }
   
-  setPluginEnabled(currentConfig.plugins['redirect'], enabled.value)
+  setPluginEnabled(currentPlugins['redirect'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 

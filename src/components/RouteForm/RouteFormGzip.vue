@@ -17,7 +17,7 @@
       <el-switch :model-value="localEnabled" @update:model-value="handleEnableChange" />
     </el-form-item>
     <template v-if="localEnabled">
-      <el-form-item label="压缩级别">
+      <el-form-item label="压缩级别" required>
         <el-input-number
           :model-value="compLevel"
           @update:model-value="handleCompLevelChange"
@@ -27,7 +27,7 @@
         />
         <div class="form-tip">动态设置 gzip_comp_level 指令，压缩级别 1-9，数字越大压缩率越高但消耗 CPU 越多，默认 9</div>
       </el-form-item>
-      <el-form-item label="最小响应大小（字节）">
+      <el-form-item label="最小响应大小（字节）" required>
         <el-input-number
           :model-value="minLength"
           @update:model-value="handleMinLengthChange"
@@ -36,7 +36,7 @@
         />
         <div class="form-tip">动态设置 gzip_min_length 指令，只有响应体大小超过此值才进行压缩，单位：字节，默认 1024 (1k)</div>
       </el-form-item>
-      <el-form-item label="压缩类型">
+      <el-form-item label="压缩类型" required>
         <el-input
           :model-value="typesInput"
           @update:model-value="handleTypesInput"
@@ -45,14 +45,14 @@
         />
         <div class="form-tip">需要压缩的 MIME 类型，多个类型用逗号分隔，输入 * 表示匹配任何 MIME 类型，默认包含 text/*, text/plain, text/css, application/javascript 等</div>
       </el-form-item>
-      <el-form-item label="HTTP 版本">
+      <el-form-item label="HTTP 版本" required>
         <el-radio-group :model-value="httpVersion" @update:model-value="handleHttpVersionChange">
           <el-radio :label="1.0">HTTP/1.0</el-radio>
           <el-radio :label="1.1">HTTP/1.1</el-radio>
         </el-radio-group>
         <div class="form-tip">动态设置 gzip_http_version 指令，默认 1.0</div>
       </el-form-item>
-      <el-form-item label="缓冲区数量">
+      <el-form-item label="缓冲区数量" required>
         <el-input-number
           :model-value="buffers.number"
           @update:model-value="handleBuffersNumberChange"
@@ -61,7 +61,7 @@
         />
         <div class="form-tip">动态设置 gzip_buffers 指令的 number 参数，默认 4</div>
       </el-form-item>
-      <el-form-item label="缓冲区大小（字节）">
+      <el-form-item label="缓冲区大小（字节）" required>
         <el-input-number
           :model-value="buffers.size"
           @update:model-value="handleBuffersSizeChange"
@@ -84,20 +84,24 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { isPluginEnabled, setPluginEnabled } from '../../utils/plugin'
+import { usePluginConfig } from '../../composables/usePluginConfig'
 
 const props = defineProps({
   modelValue: {
     type: Object,
     default: () => ({
-      plugins: {}
+      plugin_config_id: null
     })
   }
 })
 
 const emit = defineEmits(['update:modelValue'])
 
+// 使用 composable 加载和管理 Plugin Config
+const { plugins, updatePlugins } = usePluginConfig(props, emit)
+
 // 从 plugins 中提取 gzip 配置
-const gzipPlugin = computed(() => props.modelValue.plugins?.['gzip'] || {})
+const gzipPlugin = computed(() => plugins.value['gzip'] || {})
 
 // 计算 enabled 状态
 const enabled = computed(() => isPluginEnabled(gzipPlugin.value))
@@ -154,12 +158,10 @@ watch([enabled, types], ([newEnabled, newTypes]) => {
 
 // 监听内部状态变化，更新到父组件
 watch(localEnabled, (newEnabled) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
   if (newEnabled) {
-    currentConfig.plugins['gzip'] = {
+    currentPlugins['gzip'] = {
       types: types.value.length > 0 ? types.value : ['text/*', 'text/plain', 'text/css', 'application/javascript', 'application/x-javascript', 'text/xml', 'application/xml', 'application/xml+rss'],
       min_length: minLength.value,
       http_version: httpVersion.value,
@@ -170,13 +172,13 @@ watch(localEnabled, (newEnabled) => {
       },
       vary: vary.value
     }
-    setPluginEnabled(currentConfig.plugins['gzip'], true)
+    setPluginEnabled(currentPlugins['gzip'], true)
   } else {
-    currentConfig.plugins['gzip'] = currentConfig.plugins['gzip'] || {}
-    setPluginEnabled(currentConfig.plugins['gzip'], false)
+    currentPlugins['gzip'] = currentPlugins['gzip'] || {}
+    setPluginEnabled(currentPlugins['gzip'], false)
   }
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 })
 
 const handleEnableChange = (value) => {
@@ -184,17 +186,15 @@ const handleEnableChange = (value) => {
 }
 
 const handleCompLevelChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
-  currentConfig.plugins['gzip'] = {
+  currentPlugins['gzip'] = {
     ...gzipPlugin.value,
     comp_level: value
   }
-  setPluginEnabled(currentConfig.plugins['gzip'], enabled.value)
+  setPluginEnabled(currentPlugins['gzip'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleTypesInput = (value) => {
@@ -202,110 +202,98 @@ const handleTypesInput = (value) => {
 }
 
 const handleMinLengthChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
-  currentConfig.plugins['gzip'] = {
+  currentPlugins['gzip'] = {
     ...gzipPlugin.value,
     min_length: value
   }
-  setPluginEnabled(currentConfig.plugins['gzip'], enabled.value)
+  setPluginEnabled(currentPlugins['gzip'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleHttpVersionChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
-  currentConfig.plugins['gzip'] = {
+  currentPlugins['gzip'] = {
     ...gzipPlugin.value,
     http_version: value
   }
-  setPluginEnabled(currentConfig.plugins['gzip'], enabled.value)
+  setPluginEnabled(currentPlugins['gzip'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleBuffersNumberChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
-  currentConfig.plugins['gzip'] = {
+  currentPlugins['gzip'] = {
     ...gzipPlugin.value,
     buffers: {
       ...buffers.value,
       number: value
     }
   }
-  setPluginEnabled(currentConfig.plugins['gzip'], enabled.value)
+  setPluginEnabled(currentPlugins['gzip'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleBuffersSizeChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
-  currentConfig.plugins['gzip'] = {
+  currentPlugins['gzip'] = {
     ...gzipPlugin.value,
     buffers: {
       ...buffers.value,
       size: value
     }
   }
-  setPluginEnabled(currentConfig.plugins['gzip'], enabled.value)
+  setPluginEnabled(currentPlugins['gzip'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleVaryChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
-  currentConfig.plugins['gzip'] = {
+  currentPlugins['gzip'] = {
     ...gzipPlugin.value,
     vary: value
   }
-  setPluginEnabled(currentConfig.plugins['gzip'], enabled.value)
+  setPluginEnabled(currentPlugins['gzip'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleBlur = () => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
   if (typesInput.value && typesInput.value.trim()) {
     const trimmed = typesInput.value.trim()
     // 支持特殊值 "*" 表示匹配任何 MIME 类型
     if (trimmed === '*') {
-      currentConfig.plugins['gzip'] = {
+      currentPlugins['gzip'] = {
         ...gzipPlugin.value,
         types: '*'
       }
     } else {
       const typesArray = trimmed.split(',').map(s => s.trim()).filter(s => s)
-      currentConfig.plugins['gzip'] = {
+      currentPlugins['gzip'] = {
         ...gzipPlugin.value,
         types: typesArray
       }
     }
   } else {
-    currentConfig.plugins['gzip'] = {
+    currentPlugins['gzip'] = {
       ...gzipPlugin.value,
       types: []
     }
   }
-  setPluginEnabled(currentConfig.plugins['gzip'], enabled.value)
+  setPluginEnabled(currentPlugins['gzip'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 </script>
 

@@ -17,14 +17,14 @@
       <el-switch :model-value="localEnabled" @update:model-value="handleEnableChange" />
     </el-form-item>
     <template v-if="localEnabled">
-      <el-form-item label="缓存策略">
+      <el-form-item label="缓存策略" required>
         <el-radio-group :model-value="cacheStrategy" @update:model-value="handleStrategyChange">
           <el-radio label="disk">磁盘缓存 (disk)</el-radio>
           <el-radio label="memory">内存缓存 (memory)</el-radio>
         </el-radio-group>
         <div class="form-tip">缓存策略，缓存在磁盘还是内存中，默认 disk</div>
       </el-form-item>
-      <el-form-item label="缓存区域">
+      <el-form-item label="缓存区域" required>
         <el-input
           :model-value="cacheZone"
           @update:model-value="handleZoneChange"
@@ -32,7 +32,7 @@
         />
         <div class="form-tip">与缓存策略一起使用的缓存区域，该值应与配置文件中定义的缓存区域之一匹配，默认 disk_cache_one</div>
       </el-form-item>
-      <el-form-item label="缓存键">
+      <el-form-item label="缓存键" required>
         <el-select
           :model-value="cacheKey"
           @update:model-value="handleCacheKeyChange"
@@ -52,7 +52,7 @@
         </el-select>
         <div class="form-tip">用于缓存的键，支持 NGINX 变量和常量字符串，变量应该以 $ 符号为前缀，默认 ["$host", "$request_uri"]</div>
       </el-form-item>
-      <el-form-item label="缓存方法">
+      <el-form-item label="缓存方法" required>
         <el-select
           :model-value="cacheMethod"
           @update:model-value="handleCacheMethodChange"
@@ -66,7 +66,7 @@
         </el-select>
         <div class="form-tip">应缓存响应的请求方法，默认 ["GET", "HEAD"]</div>
       </el-form-item>
-      <el-form-item label="缓存 HTTP 状态码">
+      <el-form-item label="缓存 HTTP 状态码" required>
         <el-select
           :model-value="cacheHttpStatus"
           @update:model-value="handleCacheHttpStatusChange"
@@ -86,12 +86,13 @@
         </el-select>
         <div class="form-tip">应缓存响应的响应 HTTP 状态代码，默认 [200, 301, 404]</div>
       </el-form-item>
-      <el-form-item label="缓存时间（秒）">
+      <el-form-item label="缓存时间（秒）" required>
         <el-input-number
           :model-value="cacheTtl"
           @update:model-value="handleTtlChange"
           :min="1"
           style="width: 100%"
+          allow-create
         />
         <div class="form-tip">在内存中缓存时的缓存生存时间 (TTL)，以秒为单位，默认 300。磁盘缓存的 TTL 由响应标头或配置文件决定</div>
       </el-form-item>
@@ -158,20 +159,24 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { isPluginEnabled, setPluginEnabled } from '../../utils/plugin'
+import { usePluginConfig } from '../../composables/usePluginConfig'
 
 const props = defineProps({
   modelValue: {
     type: Object,
     default: () => ({
-      plugins: {}
+      plugin_config_id: null
     })
   }
 })
 
 const emit = defineEmits(['update:modelValue'])
 
+// 使用 composable 加载和管理 Plugin Config
+const { plugins, updatePlugins } = usePluginConfig(props, emit)
+
 // 从 plugins 中提取 proxy-cache 配置
-const proxyCachePlugin = computed(() => props.modelValue.plugins?.['proxy-cache'] || {})
+const proxyCachePlugin = computed(() => plugins.value['proxy-cache'] || {})
 
 // 计算 enabled 状态
 const enabled = computed(() => isPluginEnabled(proxyCachePlugin.value))
@@ -239,12 +244,10 @@ watch(enabled, (newEnabled) => {
 
 // 监听内部状态变化，更新到父组件
 watch(localEnabled, (newEnabled) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
   if (newEnabled) {
-    currentConfig.plugins['proxy-cache'] = {
+    currentPlugins['proxy-cache'] = {
       cache_strategy: cacheStrategy.value,
       cache_zone: cacheZone.value,
       cache_key: cacheKey.value,
@@ -256,18 +259,18 @@ watch(localEnabled, (newEnabled) => {
     }
     // 只有当数组不为空时才添加这些字段
     if (cacheBypass.value && Array.isArray(cacheBypass.value) && cacheBypass.value.length > 0) {
-      currentConfig.plugins['proxy-cache'].cache_bypass = cacheBypass.value
+      currentPlugins['proxy-cache'].cache_bypass = cacheBypass.value
     }
     if (noCache.value && Array.isArray(noCache.value) && noCache.value.length > 0) {
-      currentConfig.plugins['proxy-cache'].no_cache = noCache.value
+      currentPlugins['proxy-cache'].no_cache = noCache.value
     }
-    setPluginEnabled(currentConfig.plugins['proxy-cache'], true)
+    setPluginEnabled(currentPlugins['proxy-cache'], true)
   } else {
-    currentConfig.plugins['proxy-cache'] = currentConfig.plugins['proxy-cache'] || {}
-    setPluginEnabled(currentConfig.plugins['proxy-cache'], false)
+    currentPlugins['proxy-cache'] = currentPlugins['proxy-cache'] || {}
+    setPluginEnabled(currentPlugins['proxy-cache'], false)
   }
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 })
 
 const handleEnableChange = (value) => {
@@ -275,71 +278,61 @@ const handleEnableChange = (value) => {
 }
 
 const handleStrategyChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
-  currentConfig.plugins['proxy-cache'] = {
+  currentPlugins['proxy-cache'] = {
     ...proxyCachePlugin.value,
     cache_strategy: value
   }
-  setPluginEnabled(currentConfig.plugins['proxy-cache'], enabled.value)
+  setPluginEnabled(currentPlugins['proxy-cache'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleZoneChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
-  currentConfig.plugins['proxy-cache'] = {
+  currentPlugins['proxy-cache'] = {
     ...proxyCachePlugin.value,
     cache_zone: value
   }
-  setPluginEnabled(currentConfig.plugins['proxy-cache'], enabled.value)
+  setPluginEnabled(currentPlugins['proxy-cache'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleCacheKeyChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
   // 确保至少有一个默认值，不能为空数组
   const keyArray = Array.isArray(value) && value.length > 0 ? value : ['$host', '$request_uri']
   
-  currentConfig.plugins['proxy-cache'] = {
+  currentPlugins['proxy-cache'] = {
     ...proxyCachePlugin.value,
     cache_key: keyArray
   }
-  setPluginEnabled(currentConfig.plugins['proxy-cache'], enabled.value)
+  setPluginEnabled(currentPlugins['proxy-cache'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleCacheMethodChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
   // 确保至少有一个默认值，不能为空数组
   const methodArray = Array.isArray(value) && value.length > 0 ? value : ['GET', 'HEAD']
   
-  currentConfig.plugins['proxy-cache'] = {
+  currentPlugins['proxy-cache'] = {
     ...proxyCachePlugin.value,
     cache_method: methodArray
   }
-  setPluginEnabled(currentConfig.plugins['proxy-cache'], enabled.value)
+  setPluginEnabled(currentPlugins['proxy-cache'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleCacheHttpStatusChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
   // 将字符串数组转换为数字数组，过滤掉无效值
   const statusArray = Array.isArray(value)
@@ -349,99 +342,89 @@ const handleCacheHttpStatusChange = (value) => {
       }).filter(s => s !== null && s !== undefined && typeof s === 'number')
     : []
   
-  currentConfig.plugins['proxy-cache'] = {
+  currentPlugins['proxy-cache'] = {
     ...proxyCachePlugin.value,
     cache_http_status: statusArray.length > 0 ? statusArray : [200, 301, 404]
   }
-  setPluginEnabled(currentConfig.plugins['proxy-cache'], enabled.value)
+  setPluginEnabled(currentPlugins['proxy-cache'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleTtlChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
-  currentConfig.plugins['proxy-cache'] = {
+  currentPlugins['proxy-cache'] = {
     ...proxyCachePlugin.value,
     cache_ttl: value
   }
-  setPluginEnabled(currentConfig.plugins['proxy-cache'], enabled.value)
+  setPluginEnabled(currentPlugins['proxy-cache'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleHideCacheHeadersChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
-  currentConfig.plugins['proxy-cache'] = {
+  currentPlugins['proxy-cache'] = {
     ...proxyCachePlugin.value,
     hide_cache_headers: value
   }
-  setPluginEnabled(currentConfig.plugins['proxy-cache'], enabled.value)
+  setPluginEnabled(currentPlugins['proxy-cache'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleCacheControlChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
-  currentConfig.plugins['proxy-cache'] = {
+  currentPlugins['proxy-cache'] = {
     ...proxyCachePlugin.value,
     cache_control: value
   }
-  setPluginEnabled(currentConfig.plugins['proxy-cache'], enabled.value)
+  setPluginEnabled(currentPlugins['proxy-cache'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleCacheBypassChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
-  currentConfig.plugins['proxy-cache'] = {
+  currentPlugins['proxy-cache'] = {
     ...proxyCachePlugin.value
   }
   
   // 只有当数组不为空时才添加该字段，否则删除该字段
   const bypassArray = Array.isArray(value) ? value : []
   if (bypassArray.length > 0) {
-    currentConfig.plugins['proxy-cache'].cache_bypass = bypassArray
+    currentPlugins['proxy-cache'].cache_bypass = bypassArray
   } else {
-    delete currentConfig.plugins['proxy-cache'].cache_bypass
+    delete currentPlugins['proxy-cache'].cache_bypass
   }
   
-  setPluginEnabled(currentConfig.plugins['proxy-cache'], enabled.value)
+  setPluginEnabled(currentPlugins['proxy-cache'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 
 const handleNoCacheChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
-  currentConfig.plugins['proxy-cache'] = {
+  currentPlugins['proxy-cache'] = {
     ...proxyCachePlugin.value
   }
   
   // 只有当数组不为空时才添加该字段，否则删除该字段
   const noCacheArray = Array.isArray(value) ? value : []
   if (noCacheArray.length > 0) {
-    currentConfig.plugins['proxy-cache'].no_cache = noCacheArray
+    currentPlugins['proxy-cache'].no_cache = noCacheArray
   } else {
-    delete currentConfig.plugins['proxy-cache'].no_cache
+    delete currentPlugins['proxy-cache'].no_cache
   }
   
-  setPluginEnabled(currentConfig.plugins['proxy-cache'], enabled.value)
+  setPluginEnabled(currentPlugins['proxy-cache'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 </script>
 

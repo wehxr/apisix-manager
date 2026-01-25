@@ -3,7 +3,7 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>上游服务器管理</span>
+          <span>上游服务管理</span>
           <el-button type="primary" @click="handleAdd" class="create-btn">
             <el-icon><Plus /></el-icon>
             <span class="btn-text">添加上游</span>

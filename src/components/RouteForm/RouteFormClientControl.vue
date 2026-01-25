@@ -34,20 +34,24 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { isPluginEnabled, setPluginEnabled } from '../../utils/plugin'
+import { usePluginConfig } from '../../composables/usePluginConfig'
 
 const props = defineProps({
   modelValue: {
     type: Object,
     default: () => ({
-      plugins: {}
+      plugin_config_id: null
     })
   }
 })
 
 const emit = defineEmits(['update:modelValue'])
 
+// 使用 composable 加载和管理 Plugin Config
+const { plugins, updatePlugins } = usePluginConfig(props, emit)
+
 // 从 plugins 中提取 client-control 配置
-const clientControlPlugin = computed(() => props.modelValue.plugins?.['client-control'] || {})
+const clientControlPlugin = computed(() => plugins.value['client-control'] || {})
 
 // 计算 enabled 状态
 const enabled = computed(() => isPluginEnabled(clientControlPlugin.value))
@@ -68,22 +72,20 @@ watch(enabled, (newEnabled) => {
 
 // 监听内部状态变化，更新到父组件
 watch(localEnabled, (newEnabled) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
   if (newEnabled) {
-    currentConfig.plugins['client-control'] = {
+    currentPlugins['client-control'] = {
       max_body_size: maxBodySize.value ?? 1048576
     }
-    setPluginEnabled(currentConfig.plugins['client-control'], true)
+    setPluginEnabled(currentPlugins['client-control'], true)
   } else {
-    currentConfig.plugins['client-control'] = currentConfig.plugins['client-control'] || {}
-    currentConfig.plugins['client-control'].max_body_size = maxBodySize.value ?? 1048576
-    setPluginEnabled(currentConfig.plugins['client-control'], false)
+    currentPlugins['client-control'] = currentPlugins['client-control'] || {}
+    currentPlugins['client-control'].max_body_size = maxBodySize.value ?? 1048576
+    setPluginEnabled(currentPlugins['client-control'], false)
   }
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 })
 
 const handleEnableChange = (value) => {
@@ -91,17 +93,15 @@ const handleEnableChange = (value) => {
 }
 
 const handleMaxBodySizeChange = (value) => {
-  const currentConfig = {
-    plugins: { ...props.modelValue.plugins }
-  }
+  const currentPlugins = { ...plugins.value }
   
-  currentConfig.plugins['client-control'] = {
+  currentPlugins['client-control'] = {
     ...clientControlPlugin.value,
     max_body_size: value
   }
-  setPluginEnabled(currentConfig.plugins['client-control'], enabled.value)
+  setPluginEnabled(currentPlugins['client-control'], enabled.value)
   
-  emit('update:modelValue', currentConfig)
+  updatePlugins(currentPlugins)
 }
 </script>
 

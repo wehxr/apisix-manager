@@ -112,18 +112,13 @@
                 </el-button>
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item command="request-id">{{ PLUGIN_NAMES['request-id'] }}</el-dropdown-item>
-                    <el-dropdown-item command="real-ip">{{ PLUGIN_NAMES['real-ip'] }}</el-dropdown-item>
-                    <el-dropdown-item command="cors">{{ PLUGIN_NAMES['cors'] }}</el-dropdown-item>
-                    <el-dropdown-item command="basic-auth">{{ PLUGIN_NAMES['basic-auth'] }}</el-dropdown-item>
-                    <el-dropdown-item command="redirect">{{ PLUGIN_NAMES['redirect'] }}</el-dropdown-item>
-                    <el-dropdown-item command="ip-restriction">{{ PLUGIN_NAMES['ip-restriction'] }}</el-dropdown-item>
-                    <el-dropdown-item command="gzip">{{ PLUGIN_NAMES['gzip'] }}</el-dropdown-item>
-                    <el-dropdown-item command="client-control">{{ PLUGIN_NAMES['client-control'] }}</el-dropdown-item>
-                    <el-dropdown-item command="proxy-cache">{{ PLUGIN_NAMES['proxy-cache'] }}</el-dropdown-item>
-                    <el-dropdown-item command="uri-blocker">{{ PLUGIN_NAMES['uri-blocker'] }}</el-dropdown-item>
-                    <el-dropdown-item command="api-breaker">{{ PLUGIN_NAMES['api-breaker'] }}</el-dropdown-item>
-                    <el-dropdown-item command="limit-req">{{ PLUGIN_NAMES['limit-req'] }}</el-dropdown-item>
+                    <el-dropdown-item 
+                      v-for="(name, key) in PLUGIN_NAMES" 
+                      :key="key" 
+                      :command="key"
+                    >
+                      {{ name }}
+                    </el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
@@ -198,7 +193,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, ArrowDown } from '@element-plus/icons-vue'
-import { routeApi, upstreamApi } from '../utils/api'
+import { routeApi, upstreamApi, pluginConfigApi } from '../utils/api'
 import { formatTimestamp, getDialogWidth } from '../utils/format'
 import { isPluginEnabled, setPluginEnabled, getPluginName, PLUGIN_NAMES } from '../utils/plugin'
 
@@ -223,6 +218,8 @@ import RouteFormCors from '../components/RouteForm/RouteFormCors.vue'
 import RouteFormRealIp from '../components/RouteForm/RouteFormRealIp.vue'
 import RouteFormRedirect from '../components/RouteForm/RouteFormRedirect.vue'
 import RouteFormLimitReq from '../components/RouteForm/RouteFormLimitReq.vue'
+import RouteFormLimitCount from '../components/RouteForm/RouteFormLimitCount.vue'
+import RouteFormLimitConn from '../components/RouteForm/RouteFormLimitConn.vue'
 import RouteFormProxyCache from '../components/RouteForm/RouteFormProxyCache.vue'
 import RouteFormClientControl from '../components/RouteForm/RouteFormClientControl.vue'
 import RouteFormUriBlocker from '../components/RouteForm/RouteFormUriBlocker.vue'
@@ -335,6 +332,7 @@ const dialogWidth = computed(() => getDialogWidth())
 
 // 配置单个插件
 const handleConfigPlugin = async (row, pluginType) => {
+  // 先设置基本状态，确保对话框能打开
   currentRouteId.value = row.id
   currentPluginType.value = pluginType
   
@@ -347,6 +345,8 @@ const handleConfigPlugin = async (row, pluginType) => {
     'real-ip': RouteFormRealIp,
     'redirect': RouteFormRedirect,
     'limit-req': RouteFormLimitReq,
+    'limit-count': RouteFormLimitCount,
+    'limit-conn': RouteFormLimitConn,
     'proxy-cache': RouteFormProxyCache,
     'client-control': RouteFormClientControl,
     'uri-blocker': RouteFormUriBlocker,
@@ -354,76 +354,143 @@ const handleConfigPlugin = async (row, pluginType) => {
     'gzip': RouteFormGzip
   }
   
+  // 验证 pluginType 是否有效
+  if (!pluginComponents[pluginType]) {
+    ElMessage.warning(`未知的插件类型: ${pluginType}`)
+    return
+  }
+  
   pluginDialogTitle.value = PLUGIN_NAMES[pluginType] || '配置插件'
   currentPluginComponent.value = pluginComponents[pluginType]
   
-  // 只传递 plugins 对象，让组件内部处理数据提取
+  // 直接从 row 对象获取 plugin_config_id（loadData 中已经加载了）
+  let pluginConfigId = row.plugin_config_id || null
+  
+  // 先设置配置，确保对话框能立即打开
   currentPluginConfig.value = {
-    plugins: row.plugins || {}
+    plugin_config_id: pluginConfigId
   }
   
+  // 如果没有 plugin_config_id，创建一个空的 Plugin Config
+  if (!pluginConfigId) {
+    try {
+      pluginConfigId = `plugin_config_${row.id}_${Date.now()}`
+      await pluginConfigApi.create(pluginConfigId, {
+        plugins: {}
+      })
+      
+      // 更新路由，关联 plugin_config_id（只需要更新 plugin_config_id 字段）
+      await routeApi.update(row.id, {
+        plugin_config_id: pluginConfigId
+      })
+      
+      // 更新 row 对象中的 plugin_config_id，避免下次还需要创建
+      row.plugin_config_id = pluginConfigId
+      
+      // 更新配置
+      currentPluginConfig.value = {
+        plugin_config_id: pluginConfigId
+      }
+    } catch (error) {
+      // 如果创建失败，仍然继续，但会传递 null
+      console.warn('创建 Plugin Config 失败:', error)
+      // 即使创建失败，也继续打开对话框
+      currentPluginConfig.value = {
+        plugin_config_id: null
+      }
+    }
+  }
+  
+  // 确保对话框总是打开
   pluginDialogVisible.value = true
 }
 
 // 处理插件配置更新
 const handlePluginConfigUpdate = (value) => {
-  currentPluginConfig.value = { ...value }
+  // 子组件会返回更新后的 plugins
+  currentPluginConfig.value = {
+    plugin_config_id: currentPluginConfig.value.plugin_config_id,
+    plugins: value.plugins || {}
+  }
 }
 
-// 统一的保存逻辑（所有插件组件都已重构为直接操作 plugins 对象）
+// 统一的保存逻辑（使用 plugin_config_id）
 const handleSavePlugin = async () => {
   try {
     // 获取当前路由信息
     const routeRes = await routeApi.get(currentRouteId.value)
     const routeData = routeRes.data?.value || routeRes.data || {}
     
-    // 移除禁止的字段
-    const allowedFields = ['id', 'name', 'uris', 'hosts', 'methods', 'priority', 'status', 
-                           'enable_websocket', 'timeout', 'upstream_id', 'desc', 'plugins', 'vars', 'labels']
-    const cleanRouteData = {}
-    allowedFields.forEach(key => {
-      if (routeData[key] !== undefined) {
-        cleanRouteData[key] = routeData[key]
-      }
-    })
-    
-    // 初始化 plugins
-    if (!cleanRouteData.plugins) {
-      cleanRouteData.plugins = {}
-    }
-    
-    // 直接从 currentPluginConfig.value.plugins 中获取所有插件配置并合并
+    // 获取更新后的插件配置（子组件已经处理好了）
     const updatedPlugins = currentPluginConfig.value.plugins || {}
     
-    // 合并更新的插件配置到路由的 plugins 中
-    Object.keys(updatedPlugins).forEach(pluginName => {
-      if (updatedPlugins[pluginName]) {
-        cleanRouteData.plugins[pluginName] = { ...updatedPlugins[pluginName] }
-      }
-    })
-    
     // 特殊处理：proxy-cache 插件，清理空数组字段
-    if (cleanRouteData.plugins['proxy-cache']) {
-      const proxyCache = cleanRouteData.plugins['proxy-cache']
-      // 如果 cache_bypass 是空数组，删除该字段
+    if (updatedPlugins['proxy-cache']) {
+      const proxyCache = updatedPlugins['proxy-cache']
       if (Array.isArray(proxyCache.cache_bypass) && proxyCache.cache_bypass.length === 0) {
         delete proxyCache.cache_bypass
       }
-      // 如果 no_cache 是空数组，删除该字段
       if (Array.isArray(proxyCache.no_cache) && proxyCache.no_cache.length === 0) {
         delete proxyCache.no_cache
       }
     }
     
     // 特殊处理：basic-auth 可能关联 consumer-restriction
-    if (updatedPlugins['consumer-restriction']) {
-      cleanRouteData.plugins['consumer-restriction'] = { ...updatedPlugins['consumer-restriction'] }
-    } else if (currentPluginType.value === 'basic-auth' && !updatedPlugins['consumer-restriction']) {
-      // 如果配置了 basic-auth 但没有 consumer-restriction，删除它
-      delete cleanRouteData.plugins['consumer-restriction']
+    if (currentPluginType.value === 'basic-auth' && !updatedPlugins['consumer-restriction']) {
+      delete updatedPlugins['consumer-restriction']
     }
+    
+    // 清理空插件配置
+    const cleanedPlugins = {}
+    Object.keys(updatedPlugins).forEach(pluginName => {
+      const pluginConfig = updatedPlugins[pluginName]
+      if (pluginConfig) {
+        const keys = Object.keys(pluginConfig)
+        // 特殊处理：basic-auth 即使为空对象也要保留
+        if (pluginName === 'basic-auth') {
+          cleanedPlugins[pluginName] = {}
+          return
+        }
+        // 过滤掉只有 _meta.disable 的配置
+        if (keys.length === 1 && keys[0] === '_meta' && pluginConfig._meta?.disable === true) {
+          return
+        }
+        // 过滤掉空对象（除了 basic-auth）
+        if (keys.length === 0) {
+          return
+        }
+        cleanedPlugins[pluginName] = { ...pluginConfig }
+      }
+    })
+    
+    // 获取或创建 Plugin Config ID
+    let pluginConfigId = currentPluginConfig.value.plugin_config_id || routeData.plugin_config_id
+    
+    if (!pluginConfigId) {
+      pluginConfigId = `plugin_config_${currentRouteId.value}_${Date.now()}`
+    }
+    
+    // 更新或创建 Plugin Config
+    const pluginConfigData = { plugins: cleanedPlugins }
+    
+    try {
+      await pluginConfigApi.get(pluginConfigId)
+      await pluginConfigApi.update(pluginConfigId, pluginConfigData)
+    } catch (error) {
+      await pluginConfigApi.create(pluginConfigId, pluginConfigData)
+    }
+    
+    // 更新路由的 plugin_config_id
+    const allowedFields = ['id', 'name', 'uris', 'hosts', 'methods', 'priority', 'status', 
+                           'enable_websocket', 'timeout', 'upstream_id', 'desc', 'vars', 'labels']
+    const cleanRouteData = {}
+    allowedFields.forEach(key => {
+      if (routeData[key] !== undefined) {
+        cleanRouteData[key] = routeData[key]
+      }
+    })
+    cleanRouteData.plugin_config_id = pluginConfigId
 
-    // 更新路由
     await routeApi.update(currentRouteId.value, cleanRouteData)
     ElMessage.success('插件配置更新成功')
     pluginDialogVisible.value = false
@@ -482,12 +549,33 @@ const loadData = async () => {
     // 处理路由列表
     const routeData = routeRes.data
     if (routeData.list) {
-      routeList.value = routeData.list.map(item => ({
-        ...item.value,
-        id: item.value.id || item.key,
-        create_time: item.value.create_time || item.create_time,
-        update_time: item.value.update_time || item.update_time || 0
-      }))
+      // 为每个路由加载 Plugin Config
+      const routesWithPlugins = await Promise.all(
+        routeData.list.map(async (item) => {
+          const route = {
+            ...item.value,
+            id: item.value.id || item.key,
+            create_time: item.value.create_time || item.create_time,
+            update_time: item.value.update_time || item.update_time || 0,
+            plugins: {}
+          }
+          
+          // 如果有 plugin_config_id，加载 Plugin Config
+          if (route.plugin_config_id) {
+            try {
+              const pluginConfigRes = await pluginConfigApi.get(route.plugin_config_id)
+              const pluginConfigData = pluginConfigRes.data?.value || pluginConfigRes.data || {}
+              route.plugins = pluginConfigData.plugins || {}
+            } catch (error) {
+              // 如果加载失败，保持 plugins 为空对象
+            }
+          }
+          
+          return route
+        })
+      )
+      
+      routeList.value = routesWithPlugins
       pagination.value.total = routeData.total || 0
     } else {
       routeList.value = []
@@ -643,8 +731,7 @@ const handleSubmit = async () => {
         uris: form.value.uris,
         hosts: form.value.hosts,
         upstream_id: form.value.upstream_id,
-        desc: form.value.desc || undefined,
-        plugins: {}
+        desc: form.value.desc || undefined
       }
 
       // 添加标签
@@ -687,16 +774,13 @@ const handleSubmit = async () => {
         routeData.vars = form.value.vars
       }
       
-      // 如果是编辑模式，保留已有的其他插件配置
+      // 如果是编辑模式，保留已有的 plugin_config_id
       if (dialogTitle.value === '编辑路由') {
         try {
           const currentRoute = await routeApi.get(form.value.id)
           const currentRouteData = currentRoute.data?.value || currentRoute.data || {}
-          if (currentRouteData.plugins) {
-            // 保留所有已有插件
-            Object.keys(currentRouteData.plugins).forEach(key => {
-              routeData.plugins[key] = currentRouteData.plugins[key]
-            })
+          if (currentRouteData.plugin_config_id) {
+            routeData.plugin_config_id = currentRouteData.plugin_config_id
           }
         } catch (error) {
           // 如果获取失败，忽略错误，继续创建
@@ -705,6 +789,23 @@ const handleSubmit = async () => {
 
       if (dialogTitle.value === '创建路由') {
         await routeApi.create(form.value.id, routeData)
+        
+        // 创建路由后，默认创建一个空的 Plugin Config
+        try {
+          const pluginConfigId = `plugin_config_${form.value.id}_${Date.now()}`
+          await pluginConfigApi.create(pluginConfigId, {
+            plugins: {}
+          })
+          
+          // 更新路由，关联 plugin_config_id
+          const updateRouteData = { ...routeData }
+          updateRouteData.plugin_config_id = pluginConfigId
+          await routeApi.update(form.value.id, updateRouteData)
+        } catch (error) {
+          // 如果创建 Plugin Config 失败，不影响路由创建，只记录错误
+          console.warn('创建默认 Plugin Config 失败:', error)
+        }
+        
         ElMessage.success('创建成功')
       } else {
         await routeApi.update(form.value.id, routeData)
@@ -728,14 +829,13 @@ const handleCopy = async (row) => {
     
     // 准备复制数据，移除禁止的字段
     const allowedFields = ['name', 'uris', 'hosts', 'methods', 'priority', 'status', 
-                           'enable_websocket', 'timeout', 'upstream_id', 'desc', 'plugins', 'vars', 'labels']
+                           'enable_websocket', 'timeout', 'upstream_id', 'desc', 'vars', 'labels']
     const copyData = {
       id: newRouteId
     }
     
     allowedFields.forEach(key => {
       if (routeData[key] !== undefined) {
-        // 深拷贝对象和数组
         if (typeof routeData[key] === 'object' && routeData[key] !== null && !Array.isArray(routeData[key])) {
           copyData[key] = JSON.parse(JSON.stringify(routeData[key]))
         } else if (Array.isArray(routeData[key])) {
@@ -745,6 +845,41 @@ const handleCopy = async (row) => {
         }
       }
     })
+    
+    // 处理 plugin_config_id：如果有，创建新的 Plugin Config 并复制插件配置
+    if (routeData.plugin_config_id) {
+      try {
+        const pluginConfigRes = await pluginConfigApi.get(routeData.plugin_config_id)
+        const pluginConfigData = pluginConfigRes.data?.value || pluginConfigRes.data || {}
+        const newPluginConfigId = `plugin_config_${newRouteId}_${Date.now()}`
+        await pluginConfigApi.create(newPluginConfigId, {
+          plugins: pluginConfigData.plugins ? JSON.parse(JSON.stringify(pluginConfigData.plugins)) : {}
+        })
+        copyData.plugin_config_id = newPluginConfigId
+      } catch (error) {
+        // 如果获取 Plugin Config 失败，仍然创建一个空的 Plugin Config
+        try {
+          const newPluginConfigId = `plugin_config_${newRouteId}_${Date.now()}`
+          await pluginConfigApi.create(newPluginConfigId, {
+            plugins: {}
+          })
+          copyData.plugin_config_id = newPluginConfigId
+        } catch (createError) {
+          // 如果创建也失败，忽略错误
+        }
+      }
+    } else {
+      // 如果原路由没有 plugin_config_id，创建一个空的 Plugin Config
+      try {
+        const newPluginConfigId = `plugin_config_${newRouteId}_${Date.now()}`
+        await pluginConfigApi.create(newPluginConfigId, {
+          plugins: {}
+        })
+        copyData.plugin_config_id = newPluginConfigId
+      } catch (error) {
+        // 如果创建失败，忽略错误
+      }
+    }
     
     // 修改路由名称，添加"副本"后缀
     if (copyData.name) {
@@ -777,8 +912,42 @@ const handleCopy = async (row) => {
         },
         upstream_id: row.upstream_id || '',
         desc: row.desc || '',
-        plugins: row.plugins ? JSON.parse(JSON.stringify(row.plugins)) : {},
         vars: row.vars ? JSON.parse(JSON.stringify(row.vars)) : undefined
+      }
+      
+      // 处理 plugin_config_id：如果有，创建新的 Plugin Config
+      if (row.plugin_config_id) {
+        try {
+          const pluginConfigRes = await pluginConfigApi.get(row.plugin_config_id)
+          const pluginConfigData = pluginConfigRes.data?.value || pluginConfigRes.data || {}
+          const newPluginConfigId = `plugin_config_${newRouteId}_${Date.now()}`
+          await pluginConfigApi.create(newPluginConfigId, {
+            plugins: pluginConfigData.plugins ? JSON.parse(JSON.stringify(pluginConfigData.plugins)) : {}
+          })
+          copyData.plugin_config_id = newPluginConfigId
+        } catch (error) {
+          // 如果获取 Plugin Config 失败，仍然创建一个空的 Plugin Config
+          try {
+            const newPluginConfigId = `plugin_config_${newRouteId}_${Date.now()}`
+            await pluginConfigApi.create(newPluginConfigId, {
+              plugins: {}
+            })
+            copyData.plugin_config_id = newPluginConfigId
+          } catch (createError) {
+            // 如果创建也失败，忽略错误
+          }
+        }
+      } else {
+        // 如果原路由没有 plugin_config_id，创建一个空的 Plugin Config
+        try {
+          const newPluginConfigId = `plugin_config_${newRouteId}_${Date.now()}`
+          await pluginConfigApi.create(newPluginConfigId, {
+            plugins: {}
+          })
+          copyData.plugin_config_id = newPluginConfigId
+        } catch (error) {
+          // 如果创建失败，忽略错误
+        }
       }
       
       await routeApi.create(newRouteId, copyData)
