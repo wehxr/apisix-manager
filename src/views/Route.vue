@@ -226,6 +226,7 @@ import RouteFormUriBlocker from '../components/RouteForm/RouteFormUriBlocker.vue
 import RouteFormApiBreaker from '../components/RouteForm/RouteFormApiBreaker.vue'
 import RouteFormGzip from '../components/RouteForm/RouteFormGzip.vue'
 import RouteFormRequestId from '../components/RouteForm/RouteFormRequestId.vue'
+import RouteFormProxyRewrite from '../components/RouteForm/RouteFormProxyRewrite.vue'
 
 const loading = ref(false)
 const routeList = ref([])
@@ -351,7 +352,8 @@ const handleConfigPlugin = async (row, pluginType) => {
     'client-control': RouteFormClientControl,
     'uri-blocker': RouteFormUriBlocker,
     'api-breaker': RouteFormApiBreaker,
-    'gzip': RouteFormGzip
+    'gzip': RouteFormGzip,
+    'proxy-rewrite': RouteFormProxyRewrite
   }
   
   // 验证 pluginType 是否有效

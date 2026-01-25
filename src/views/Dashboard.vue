@@ -130,6 +130,7 @@ onMounted(() => {
 
 .stat-info {
   flex: 1;
+  text-align: right;
 }
 
 .stat-value {

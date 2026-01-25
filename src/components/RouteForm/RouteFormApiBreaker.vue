@@ -38,26 +38,28 @@
         <div class="form-tip">可选，当断路器打开时返回的自定义响应体</div>
       </el-form-item>
       <el-form-item label="断路器响应头">
-        <div
-          v-for="(h, idx) in breakResponseHeadersList"
-          :key="idx"
-          class="header-row"
-        >
-          <el-input
-            :model-value="h.key"
-            @update:model-value="(v) => updateHeader(idx, 'key', v)"
-            placeholder="Header 名称"
-            style="flex: 1; margin-right: 8px;"
-          />
-          <el-input
-            :model-value="h.value"
-            @update:model-value="(v) => updateHeader(idx, 'value', v)"
-            placeholder="值，可含 $var 如 $remote_addr"
-            style="flex: 1; margin-right: 8px;"
-          />
-          <el-button type="danger" link @click="removeHeader(idx)">删除</el-button>
+        <div class="headers-block">
+          <div
+            v-for="(h, idx) in breakResponseHeadersList"
+            :key="idx"
+            class="header-row"
+          >
+            <el-input
+              :model-value="h.key"
+              @update:model-value="(v) => updateHeader(idx, 'key', v)"
+              placeholder="Header 名称"
+              class="header-key"
+            />
+            <el-input
+              :model-value="h.value"
+              @update:model-value="(v) => updateHeader(idx, 'value', v)"
+              placeholder="值，可含 $var 如 $remote_addr"
+              class="header-value"
+            />
+            <el-button type="danger" link class="header-delete" @click="removeHeader(idx)">删除</el-button>
+          </div>
+          <el-button type="primary" link class="add-header-btn" @click="addHeader">+ 添加响应头</el-button>
         </div>
-        <el-button type="primary" link @click="addHeader">+ 添加响应头</el-button>
         <div class="form-tip">可选，熔断时返回的 HTTP 响应头；仅当配置了「断路器响应体」时生效，value 可含 Nginx 变量如 $remote_addr</div>
       </el-form-item>
       <el-form-item label="不健康状态码" required>
@@ -327,13 +329,48 @@ const handleBlur = () => {
   font-size: 12px;
   color: #909399;
   margin-top: 5px;
-  display: block; 
+  display: block;
   width: 100%;
+}
+
+.headers-block {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .header-row {
   display: flex;
   align-items: center;
-  margin-bottom: 8px;
+  gap: 8px;
+}
+
+.header-key,
+.header-value {
+  flex: 1;
+  min-width: 0;
+}
+
+.header-delete {
+  flex-shrink: 0;
+  padding-left: 4px;
+}
+
+.add-header-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 8px 12px;
+  text-align: center;
+  border: 1px dashed #dcdfe6;
+  border-radius: 4px;
+  color: #606266;
+}
+
+.add-header-btn:hover {
+  border-color: #409eff;
+  color: #409eff;
 }
 </style>

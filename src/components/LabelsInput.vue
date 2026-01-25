@@ -9,7 +9,6 @@
         <el-input
           v-model="item.key"
           placeholder="键"
-          size="small"
           class="label-key"
           @input="handleChange"
         />
@@ -17,7 +16,6 @@
         <el-input
           v-model="item.value"
           placeholder="值"
-          size="small"
           class="label-value"
           @input="handleChange"
         />

@@ -7,6 +7,7 @@ export const PLUGIN_NAMES = {
   'ip-restriction': 'IP 限制',
   'cors': '跨域配置',
   'real-ip': '真实IP透传',
+  'proxy-rewrite': '代理重写',
   'redirect': '重定向',
   'gzip': 'Gzip压缩', 
   'proxy-cache': '代理缓存',
