@@ -967,7 +967,7 @@ const handleDelete = async (row) => {
       type: 'warning'
     })
     
-    // 获取路由的 plugin_config_id（先从 row 获取，如果没有则从 API 获取）
+    // 先获取路由的 plugin_config_id（用于后续删除）
     let pluginConfigId = row.plugin_config_id
     if (!pluginConfigId) {
       try {
@@ -979,36 +979,26 @@ const handleDelete = async (row) => {
       }
     }
     
-    // 删除路由
+    // 先删除路由
     await routeApi.delete(row.id)
     
-    // 如果存在 plugin_config_id，检查是否被其他路由使用
+    // 如果路由删除成功，尝试删除关联的 plugin_config_id
     if (pluginConfigId) {
       try {
-        // 获取所有路由列表，检查是否有其他路由使用相同的 plugin_config_id
-        const allRoutesRes = await routeApi.list({ page: 1, page_size: 1000 })
-        const allRoutes = allRoutesRes.data?.list || []
-        const otherRoutesUsingConfig = allRoutes.filter(item => {
-          const route = item.value || {}
-          return route.id !== row.id && route.plugin_config_id === pluginConfigId
-        })
-        
-        if (otherRoutesUsingConfig.length > 0) {
-          ElMessage.warning(`路由已删除。注意：该路由的 Plugin Config (${pluginConfigId}) 仍被其他路由使用，未删除。`)
-        } else {
-          ElMessage.warning(`路由已删除。注意：该路由关联的 Plugin Config (${pluginConfigId}) 未被其他路由使用，如需删除请手动操作。`)
-        }
+        // 尝试删除 plugin_config_id，接口会返回是否被其他路由使用的错误信息
+        await pluginConfigApi.delete(pluginConfigId)
       } catch (error) {
-        // 如果检查失败，只提示有 plugin_config_id 存在
-        ElMessage.warning(`路由已删除。注意：该路由关联的 Plugin Config (${pluginConfigId}) 可能存在，请检查是否需要删除。`)
+        // 如果删除失败（比如被其他路由使用），拦截器会自动显示错误信息
+        // 这里不阻止流程，因为路由已经删除成功了
       }
-    } else {
-      ElMessage.success('删除成功')
     }
     
+    // 如果删除成功，显示成功消息并刷新列表
+    ElMessage.success('删除成功')
     loadData()
   } catch (error) {
     // 错误消息已由拦截器自动显示（用户取消操作除外）
+    // 如果删除路由失败，拦截器会自动显示错误信息
   }
 }
 
