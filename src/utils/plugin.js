@@ -5,7 +5,7 @@ export const PLUGIN_NAMES = {
   'request-id': '生成请求ID',
   'basic-auth': '基本认证',
   'ip-restriction': 'IP 限制',
-  'cors': '跨域配置',
+  'cors': '跨域策略',
   'real-ip': '真实IP透传',
   'proxy-rewrite': '代理重写',
   'redirect': '重定向',
