@@ -4,159 +4,97 @@
       <template #header>
         <div class="card-header">
           <span>全局规则</span>
-          <el-button type="primary" @click="handleEdit" class="create-btn">
-            <el-icon><Setting /></el-icon>
-            <span class="btn-text">配置全局插件</span>
-          </el-button>
         </div>
       </template>
 
-      <el-alert
-        title="全局规则说明"
-        type="info"
-        :closable="false"
-        style="margin-bottom: 20px;"
-      >
-        <template #default>
-          <div style="font-size: 13px; line-height: 1.6;">
-            全局规则用于配置全局运行的插件，设置为全局规则的插件将在所有路由级别的插件之前优先运行。
-            支持的全局插件：<strong>{{ availablePluginsText }}</strong>
-          </div>
-        </template>
-      </el-alert>
-
-      <div v-if="globalRule" class="global-rule-content">
-        <el-descriptions :column="2" border>
-          <el-descriptions-item label="规则 ID" :span="2">{{ globalRule.id }}</el-descriptions-item>
-          <el-descriptions-item label="已启用插件" :span="2">
-            <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
-              <el-tag
-                v-for="key in enabledPlugins"
-                :key="key"
-                size="small"
-                type="primary"
-                closable
-                @close="handleDisablePlugin(key)"
-              >
-                {{ getPluginName(key) }}
-              </el-tag>
-              <el-dropdown @command="(command) => handleConfigPlugin(command)" trigger="click" v-if="availablePlugins.length > 0">
-                <el-button size="small" type="primary" plain>
-                  添加插件<el-icon class="el-icon--right"><ArrowDown /></el-icon>
-                </el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item 
-                      v-for="pluginKey in availablePlugins" 
-                      :key="pluginKey" 
-                      :command="pluginKey"
-                      :disabled="enabledPlugins.includes(pluginKey)"
-                    >
-                      {{ PLUGIN_NAMES[pluginKey] }}
-                    </el-dropdown-item>
-                  </el-dropdown-menu>
+      <div class="table-wrapper">
+        <el-table :data="globalRuleList" v-loading="loading" style="width: 100%">
+          <el-table-column prop="id" label="规则 ID" width="200" />
+          <el-table-column prop="plugins" label="插件" min-width="250">
+            <template #default="{ row }">
+              <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                <template v-if="row.plugins" v-for="(plugin, key) in row.plugins" :key="key">
+                  <el-tag
+                    v-if="isPluginEnabled(plugin)"
+                    size="small"
+                  >
+                    {{ getPluginName(key) }}
+                  </el-tag>
                 </template>
-              </el-dropdown>
-              <span v-if="enabledPlugins.length === 0 && availablePlugins.length === 0" style="color: #909399">暂无启用的插件</span>
-            </div>
-          </el-descriptions-item>
-          <el-descriptions-item label="创建时间" :span="1">
-            {{ formatTimestamp(globalRule.create_time) }}
-          </el-descriptions-item>
-          <el-descriptions-item label="更新时间" :span="1">
-            {{ formatTimestamp(globalRule.update_time) }}
-          </el-descriptions-item>
-        </el-descriptions>
+                <span v-if="!row.plugins || !Object.keys(row.plugins || {}).some(key => isPluginEnabled(row.plugins[key]))" style="color: #909399">-</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column prop="create_time" label="创建时间" width="180">
+            <template #default="{ row }">
+              <span>{{ formatTimestamp(row.create_time) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="update_time" label="更新时间" width="180">
+            <template #default="{ row }">
+              <span>{{ formatTimestamp(row.update_time) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="220" fixed="right" class-name="action-column">
+            <template #default="{ row }">
+              <div class="action-buttons">
+                <el-dropdown @command="(command) => handlePluginCommand(row, command)" trigger="click">
+                  <el-button size="small">
+                    插件<el-icon class="el-icon--right"><arrow-down /></el-icon>
+                  </el-button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item 
+                        v-for="pluginKey in availablePlugins" 
+                        :key="pluginKey" 
+                        :command="pluginKey"
+                      >
+                        {{ PLUGIN_NAMES[pluginKey] }}
+                      </el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </div>
+            </template>
+          </el-table-column>
+        </el-table>
       </div>
-
-      <el-empty v-else description="暂无全局规则，点击上方按钮创建" />
     </el-card>
-
-    <!-- 编辑对话框 -->
-    <el-dialog
-      v-model="dialogVisible"
-      title="配置全局插件"
-      :width="dialogWidth"
-      @close="resetForm"
-    >
-      <el-form :model="form" label-width="140px" ref="formRef">
-        <template v-for="pluginKey in availablePlugins" :key="pluginKey">
-          <el-divider>{{ PLUGIN_NAMES[pluginKey] }}</el-divider>
-          <component
-            v-if="getPluginComponent(pluginKey)"
-            :is="getPluginComponent(pluginKey)"
-            :model-value="form"
-            @update:model-value="handleFormUpdate"
-          />
-        </template>
-      </el-form>
-
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSubmit">确定</el-button>
-      </template>
-    </el-dialog>
 
     <!-- 插件配置对话框 -->
     <PluginDialog
       v-model="pluginDialogVisible"
       resource-type="global_rule"
-      :resource-id="globalRule?.id || ''"
+      :resource-id="currentGlobalRuleId"
       :plugin-type="currentPluginType"
-      :initial-config="{ plugins: globalRule?.plugins || {} }"
+      :initial-config="{ plugins: currentGlobalRulePlugins || {} }"
       @saved="handlePluginSaved"
     />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Setting, ArrowDown } from '@element-plus/icons-vue'
+import { ArrowDown } from '@element-plus/icons-vue'
 import { globalRuleApi } from '@/utils/api'
-import { formatTimestamp, getDialogWidth } from '@/utils/format'
+import { formatTimestamp } from '@/utils/format'
 import { isPluginEnabled, getPluginName, PLUGIN_NAMES, RESOURCE_TYPES, getPluginsByResourceType } from '@/utils/plugin'
 import { generateId } from '@/utils/id'
 import PluginDialog from '@/components/PluginDialog.vue'
-import PluginFormRealIp from '@/components/PluginForm/PluginFormRealIp.vue'
-import PluginFormRequestId from '@/components/PluginForm/PluginFormRequestId.vue'
-import PluginFormCors from '@/components/PluginForm/PluginFormCors.vue'
 
 const loading = ref(false)
-const globalRule = ref(null)
-const dialogVisible = ref(false)
-const formRef = ref(null)
-const form = ref({
-  id: '',
-  plugins: {}
-})
-
-const dialogWidth = computed(() => getDialogWidth())
+const globalRuleList = ref([])
+const pluginDialogVisible = ref(false)
+const currentGlobalRuleId = ref('')
+const currentPluginType = ref('')
+const currentGlobalRulePlugins = ref({})
 
 // 获取可用于 global_rule 的插件列表
 const availablePlugins = computed(() => {
   return getPluginsByResourceType(RESOURCE_TYPES.GLOBAL_RULE)
 })
 
-// 可用插件的文本描述
-const availablePluginsText = computed(() => {
-  return availablePlugins.value.map(key => `${PLUGIN_NAMES[key]}`).join('、')
-})
-
-const enabledPlugins = computed(() => {
-  if (!globalRule.value || !globalRule.value.plugins) return []
-  const plugins = globalRule.value.plugins
-  // 显示所有启用的插件（不限制类型）
-  return Object.keys(plugins).filter(key => {
-    const plugin = plugins[key]
-    return isPluginEnabled(plugin, key, plugins)
-  })
-})
-
-// 插件配置对话框相关
-const pluginDialogVisible = ref(false)
-const currentPluginType = ref('')
-const currentPluginConfigId = ref(null)
 
 const loadData = async () => {
   loading.value = true
@@ -164,129 +102,55 @@ const loadData = async () => {
     const response = await globalRuleApi.list()
     const data = response.data
     if (data.list && data.list.length > 0) {
-      // 取第一个全局规则（通常只有一个）
-      const rule = data.list[0]
-      globalRule.value = {
-        ...rule.value,
-        id: rule.value.id || rule.key?.split('/').pop() || generateId('global_rule')
-      }
+      globalRuleList.value = data.list.map(item => {
+        const rule = item.value || {}
+        return {
+          ...rule,
+          id: rule.id || item.key?.split('/').pop() || generateId('global_rule'),
+          plugins: rule.plugins || {},
+          create_time: rule.create_time || item.create_time,
+          update_time: rule.update_time || item.update_time
+        }
+      })
     } else {
-      globalRule.value = null
+      globalRuleList.value = []
     }
   } catch (error) {
     console.error('加载全局规则失败:', error)
-    globalRule.value = null
+    globalRuleList.value = []
   } finally {
     loading.value = false
   }
 }
 
-// 获取插件组件（统一使用 PluginForm 组件，支持所有资源类型）
-const getPluginComponent = (pluginKey) => {
-  const components = {
-    'real-ip': PluginFormRealIp,
-    'request-id': PluginFormRequestId,
-    'cors': PluginFormCors
-  }
-  // 如果组件不存在，返回 null
-  return components[pluginKey] || null
+// 处理插件下拉菜单命令
+const handlePluginCommand = (row, command) => {
+  handleConfigPlugin(row, command)
 }
 
 // 配置单个插件
-const handleConfigPlugin = (pluginType) => {
-  currentPluginType.value = pluginType
-  pluginDialogVisible.value = true
-}
-
-// 禁用插件
-const handleDisablePlugin = async (pluginKey) => {
-  try {
-    if (!globalRule.value) return
-    
-    const plugins = { ...globalRule.value.plugins }
-    if (plugins[pluginKey]) {
-      // 设置插件为禁用状态
-      plugins[pluginKey] = {
-        ...plugins[pluginKey],
-        _meta: {
-          disable: true
-        }
-      }
-      
-      const ruleData = { plugins }
-      await globalRuleApi.update(globalRule.value.id, ruleData)
-      ElMessage.success('插件已禁用')
-      await loadData()
-    }
-  } catch (error) {
-    console.error('禁用插件失败:', error)
-    // 错误消息已由拦截器自动显示
+const handleConfigPlugin = async (row, pluginType) => {
+  // 先关闭对话框（如果已打开），确保状态重置
+  if (pluginDialogVisible.value) {
+    pluginDialogVisible.value = false
+    await nextTick()
   }
+  
+  // 设置所有必要的值
+  currentGlobalRuleId.value = row.id
+  currentPluginType.value = pluginType
+  currentGlobalRulePlugins.value = row.plugins || {}
+  
+  // 等待一个 tick 确保响应式更新完成
+  await nextTick()
+  
+  // 打开对话框
+  pluginDialogVisible.value = true
 }
 
 // 处理插件保存成功
 const handlePluginSaved = () => {
   loadData()
-}
-
-const handleEdit = () => {
-  if (globalRule.value) {
-    form.value = {
-      id: globalRule.value.id || generateId('global_rule'),
-      plugins: globalRule.value.plugins || {}
-    }
-  } else {
-    form.value = {
-      id: generateId('global_rule'),
-      plugins: {}
-    }
-  }
-  dialogVisible.value = true
-}
-
-const handleFormUpdate = (newForm) => {
-  form.value = { ...form.value, ...newForm }
-}
-
-const handleSubmit = async () => {
-  try {
-    const ruleData = {
-      plugins: {}
-    }
-
-    // 只保留支持 global_rule 的插件
-    const formPlugins = form.value.plugins || {}
-    
-    availablePlugins.value.forEach(key => {
-      if (formPlugins[key]) {
-        const plugin = formPlugins[key]
-        // 只添加已启用的插件
-        if (isPluginEnabled(plugin, key, formPlugins)) {
-          ruleData.plugins[key] = plugin
-        }
-      }
-    })
-
-    if (globalRule.value) {
-      await globalRuleApi.update(form.value.id, ruleData)
-      ElMessage.success('更新全局规则成功')
-    } else {
-      await globalRuleApi.create(form.value.id, ruleData)
-      ElMessage.success('创建全局规则成功')
-    }
-    
-    dialogVisible.value = false
-    await loadData()
-  } catch (error) {
-    console.error('保存全局规则失败:', error)
-    // 错误消息已由拦截器自动显示
-  }
-}
-
-const resetForm = () => {
-  if (formRef.value) {
-    formRef.value.resetFields()
-  }
 }
 
 onMounted(() => {
@@ -305,23 +169,21 @@ onMounted(() => {
   align-items: center;
 }
 
-.create-btn {
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.action-buttons {
   display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.btn-text {
-  margin-left: 4px;
-}
-
-.global-rule-content {
-  margin-top: 20px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 @media (max-width: 768px) {
-  .btn-text {
-    display: none;
+  .action-buttons {
+    flex-direction: column;
   }
 }
 </style>

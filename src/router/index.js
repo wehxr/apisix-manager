@@ -4,6 +4,7 @@ import Settings from '../views/Settings.vue'
 import Dashboard from '../views/Dashboard.vue'
 import SSL from '../views/SSL.vue'
 import Consumer from '../views/Consumer.vue'
+import ConsumerGroup from '../views/ConsumerGroup.vue'
 import Upstream from '../views/Upstream.vue'
 import Route from '../views/Route.vue'
 import GlobalRule from '../views/GlobalRule.vue'
@@ -19,6 +20,7 @@ const routes = [
       { path: 'settings', component: Settings },
       { path: 'ssl', component: SSL },
       { path: 'consumer', component: Consumer },
+      { path: 'consumer-group', component: ConsumerGroup },
       { path: 'upstream', component: Upstream },
       { path: 'route', component: Route },
       { path: 'global-rule', component: GlobalRule }

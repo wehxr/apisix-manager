@@ -79,13 +79,12 @@
             <div style="display: flex; flex-wrap: wrap; gap: 4px;">
               <template v-if="row.plugins" v-for="(plugin, key) in row.plugins" :key="key">
                 <el-tag
-                  v-if="isPluginEnabled(plugin, key, row.plugins) && key !== 'consumer-restriction'"
+                  v-if="isPluginEnabled(plugin) && key !== 'basic-auth'"
                   size="small"
                 >
                   {{ getPluginName(key) }}
                 </el-tag>
               </template>
-              <span v-if="!row.plugins || !Object.keys(row.plugins || {}).some(key => key !== 'consumer-restriction' && isPluginEnabled(row.plugins[key], key, row.plugins))" style="color: #909399">-</span>
             </div>
           </template>
         </el-table-column>

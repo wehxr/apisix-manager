@@ -11,6 +11,8 @@ import { pluginConfigApi } from '../utils/api'
 export function usePluginConfig(props, emit) {
   // 内部状态：plugins
   const plugins = ref({})
+  // 标志：是否正在内部更新，避免触发 watch 重新加载
+  const isInternalUpdate = ref(false)
 
   // 判断是 route 模式还是 global_rule 模式
   const isRouteMode = computed(() => {
@@ -23,6 +25,11 @@ export function usePluginConfig(props, emit) {
 
   // 从 Plugin Config 加载插件配置（route 模式）
   const loadPluginConfig = async () => {
+    // 如果正在内部更新，不重新加载
+    if (isInternalUpdate.value) {
+      return
+    }
+    
     if (props.modelValue.plugin_config_id) {
       try {
         const pluginConfigRes = await pluginConfigApi.get(props.modelValue.plugin_config_id)
@@ -39,17 +46,22 @@ export function usePluginConfig(props, emit) {
     }
   }
 
-  // 监听 plugin_config_id 或 plugins 变化
-  watch(() => [props.modelValue.plugin_config_id, props.modelValue.plugins], () => {
-    loadPluginConfig()
-  }, { immediate: true, deep: true })
+  // 监听 plugin_config_id 变化（只监听外部变化，不监听 plugins 变化）
+  // 对于 global_rule 模式，只在初始化时加载，之后不再监听 plugins 变化
+  watch(() => props.modelValue.plugin_config_id, () => {
+    if (!isInternalUpdate.value) {
+      loadPluginConfig()
+    }
+  }, { immediate: true })
 
+  // 初始化加载配置
   onMounted(() => {
     loadPluginConfig()
   })
 
   // 更新插件配置并通知父组件
   const updatePlugins = (newPlugins) => {
+    isInternalUpdate.value = true
     plugins.value = { ...newPlugins }
     
     if (isRouteMode.value) {
@@ -62,6 +74,11 @@ export function usePluginConfig(props, emit) {
       // 其他模式
       emit('update:modelValue', { plugins: plugins.value })
     }
+    
+    // 使用 nextTick 确保 emit 完成后再重置标志
+    setTimeout(() => {
+      isInternalUpdate.value = false
+    }, 0)
   }
 
   return {

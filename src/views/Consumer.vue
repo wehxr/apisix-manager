@@ -7,111 +7,85 @@
         </div>
       </template>
 
-      <el-tabs v-model="activeTab" @tab-change="handleTabChange" :tab-position="tabPosition" class="consumer-tabs">
-        <el-tab-pane label="消费者" name="consumer">
-          <div class="action-bar">
-            <el-button type="primary" @click="handleAdd" class="create-btn">
-              <el-icon><Plus /></el-icon>
-              <span class="btn-text">创建消费者</span>
-            </el-button>
-          </div>
-          <div class="table-wrapper">
-            <el-table :data="consumerList" v-loading="loading" style="width: 100%">
-            <el-table-column prop="username" label="用户名"/>
-            <el-table-column prop="group_id" label="消费者组" width="150">
-              <template #default="{ row }">
-                <el-tag v-if="row.group_id" type="info" size="small">{{ getGroupName(row.group_id) }}</el-tag>
-                <span v-else style="color: #909399">-</span>
+      <div class="action-bar">
+        <el-button type="primary" @click="handleAdd" class="create-btn">
+          <el-icon><Plus /></el-icon>
+          <span class="btn-text">创建消费者</span>
+        </el-button>
+      </div>
+      <div class="table-wrapper">
+        <el-table :data="consumerList" v-loading="loading" style="width: 100%">
+        <el-table-column prop="username" label="用户名"/>
+        <el-table-column prop="group_id" label="消费者组" width="150">
+          <template #default="{ row }">
+            <el-tag v-if="row.group_id" type="info" size="small">{{ getGroupName(row.group_id) }}</el-tag>
+            <span v-else style="color: #909399">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="plugins" label="插件" min-width="250">
+          <template #default="{ row }">
+            <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+              <template v-if="row.plugins" v-for="(plugin, key) in row.plugins" :key="key">
+                <el-tag
+                  v-if="isPluginEnabled(plugin)"
+                  size="small"
+                >
+                  {{ getPluginName(key) }}
+                </el-tag>
               </template>
-            </el-table-column>
-            <el-table-column prop="plugins" label="插件">
-              <template #default="{ row }">
-                <el-tag v-if="row.hasBasicAuth" size="small">Basic Auth</el-tag>
-                <span v-else style="color: #909399">-</span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="desc" label="描述" min-width="200" show-overflow-tooltip />
-            <el-table-column prop="create_time" label="创建时间" width="180">
-              <template #default="{ row }">
-                <span>{{ formatTimestamp(row.create_time) }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="update_time" label="更新时间" width="180">
-              <template #default="{ row }">
-                <span>{{ formatTimestamp(row.update_time) }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="180" fixed="right">
-              <template #default="{ row }">
-                <el-button size="small" @click="handleEdit(row)">编辑</el-button>
-                <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-          </div>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="desc" label="描述" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="create_time" label="创建时间" width="180">
+          <template #default="{ row }">
+            <span>{{ formatTimestamp(row.create_time) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="update_time" label="更新时间" width="180">
+          <template #default="{ row }">
+            <span>{{ formatTimestamp(row.update_time) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="280" fixed="right" class-name="action-column">
+          <template #default="{ row }">
+            <div class="action-buttons">
+              <el-button size="small" @click="handleEdit(row)">编辑</el-button>
+              <el-dropdown @command="(command) => handlePluginCommand(row, command)" trigger="click">
+                <el-button size="small">
+                  插件<el-icon class="el-icon--right"><arrow-down /></el-icon>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item 
+                      v-for="pluginKey in availablePlugins" 
+                      :key="pluginKey" 
+                      :command="pluginKey"
+                    >
+                      {{ PLUGIN_NAMES[pluginKey] }}
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+              <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            </div>
+          </template>
+        </el-table-column>
+      </el-table>
+      </div>
 
-          <!-- 分页 -->
-          <div class="pagination-wrapper">
-            <el-pagination
-              v-model:current-page="pagination.page"
-              v-model:page-size="pagination.pageSize"
-              :page-sizes="[10, 20, 50, 100]"
-              :total="pagination.total"
-              :layout="paginationLayout"
-              @size-change="handleSizeChange"
-              @current-change="handlePageChange"
-            />
-          </div>
-        </el-tab-pane>
-
-        <el-tab-pane label="消费者组" name="group">
-          <div class="action-bar">
-            <el-button type="primary" @click="handleAdd" class="create-btn">
-              <el-icon><Plus /></el-icon>
-              <span class="btn-text">创建消费者组</span>
-            </el-button>
-          </div>
-          <div class="table-wrapper">
-            <el-table :data="groupList" v-loading="groupLoading" style="width: 100%">
-            <el-table-column prop="name" label="名称" width="200">
-              <template #default="{ row }">
-                <span>{{ row.name || '-' }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="desc" label="描述" min-width="200" show-overflow-tooltip />
-            <el-table-column prop="create_time" label="创建时间" width="180">
-              <template #default="{ row }">
-                <span>{{ formatTimestamp(row.create_time) }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="update_time" label="更新时间" width="180">
-              <template #default="{ row }">
-                <span>{{ formatTimestamp(row.update_time) }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="180" fixed="right">
-              <template #default="{ row }">
-                <el-button size="small" @click="handleGroupEdit(row)">编辑</el-button>
-                <el-button size="small" type="danger" @click="handleGroupDelete(row)">删除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-          </div>
-
-          <!-- 分页 -->
-          <div class="pagination-wrapper">
-            <el-pagination
-              v-model:current-page="groupPagination.page"
-              v-model:page-size="groupPagination.pageSize"
-              :page-sizes="[10, 20, 50, 100]"
-              :total="groupPagination.total"
-              :layout="groupPaginationLayout"
-              @size-change="handleGroupSizeChange"
-              @current-change="handleGroupPageChange"
-            />
-          </div>
-        </el-tab-pane>
-      </el-tabs>
+      <!-- 分页 -->
+      <div class="pagination-wrapper">
+        <el-pagination
+          v-model:current-page="pagination.page"
+          v-model:page-size="pagination.pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="pagination.total"
+          :layout="paginationLayout"
+          @size-change="handleSizeChange"
+          @current-change="handlePageChange"
+        />
+      </div>
     </el-card>
 
     <!-- 消费者添加/编辑对话框 -->
@@ -166,27 +140,6 @@
           />
           <div class="form-tip">可选，用于标记和分类消费者</div>
         </el-form-item>
-        <el-divider>Basic Auth 配置</el-divider>
-        <el-form-item label="启用 Basic Auth">
-          <el-switch v-model="enableBasicAuth" />
-        </el-form-item>
-        <template v-if="enableBasicAuth">
-          <el-form-item label="认证用户名" prop="authUsername">
-            <el-input
-              v-model="form.authUsername"
-              placeholder="Basic Auth 认证用户名（可与消费者用户名不同）"
-            />
-            <div class="form-tip">留空则使用消费者用户名</div>
-          </el-form-item>
-          <el-form-item label="密码" prop="password">
-            <el-input
-              v-model="form.password"
-              type="password"
-              show-password
-              placeholder="请输入密码"
-            />
-          </el-form-item>
-        </template>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -194,60 +147,27 @@
       </template>
     </el-dialog>
 
-    <!-- 消费者组添加/编辑对话框 -->
-    <el-dialog
-      v-model="groupDialogVisible"
-      :title="groupDialogTitle"
-      :width="dialogWidth"
-      @close="resetGroupForm"
-    >
-      <el-form :model="groupForm" label-width="120px" ref="groupFormRef" :rules="groupRules">
-        <el-form-item label="名称" prop="name">
-          <el-input
-            v-model="groupForm.name"
-            placeholder="请输入消费者组名称（可选）"
-          />
-        </el-form-item>
-        <el-form-item label="描述" prop="desc">
-          <el-input
-            v-model="groupForm.desc"
-            type="textarea"
-            :rows="3"
-            placeholder="请输入描述信息（可选）"
-          />
-        </el-form-item>
-        <el-form-item label="标签" prop="labels">
-          <LabelsInput
-            v-model="groupForm.labels"
-          />
-          <div class="form-tip">可选，用于标记和分类消费者组</div>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="groupDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleGroupSubmit">确定</el-button>
-      </template>
-    </el-dialog>
+    <!-- 插件配置对话框 -->
+    <PluginDialog
+      v-model="pluginDialogVisible"
+      resource-type="consumer"
+      :resource-id="currentConsumerId"
+      :plugin-type="currentPluginType"
+      :initial-config="{ plugins: currentConsumerPlugins || {} }"
+      @saved="handlePluginSaved"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
-import { consumerApi, consumerGroupApi, getConfig, getErrorMessage } from '../utils/api'
+import { Plus, ArrowDown } from '@element-plus/icons-vue'
+import { consumerApi, consumerGroupApi } from '../utils/api'
 import { formatTimestamp, getDialogWidth } from '../utils/format'
-import { generateId } from '../utils/id'
-import axios from 'axios'
+import { isPluginEnabled, getPluginName, PLUGIN_NAMES, RESOURCE_TYPES, getPluginsByResourceType } from '../utils/plugin'
 import LabelsInput from '../components/LabelsInput.vue'
-
-// 响应式标签页位置
-const tabPosition = computed(() => {
-  if (typeof window === 'undefined') {
-    return 'left'
-  }
-  return window.innerWidth < 768 ? 'top' : 'left'
-})
+import PluginDialog from '../components/PluginDialog.vue'
 
 // 响应式分页布局
 const paginationLayout = computed(() => {
@@ -264,46 +184,27 @@ const paginationLayout = computed(() => {
   }
 })
 
-const groupPaginationLayout = computed(() => {
-  if (typeof window === 'undefined') {
-    return 'total, sizes, prev, pager, next, jumper'
-  }
-  const screenWidth = window.innerWidth
-  if (screenWidth < 768) {
-    return 'prev, pager, next'
-  } else if (screenWidth < 1024) {
-    return 'total, prev, pager, next'
-  } else {
-    return 'total, sizes, prev, pager, next, jumper'
-  }
-})
-
-const activeTab = ref('consumer')
 const loading = ref(false)
-const groupLoading = ref(false)
 const consumerList = ref([])
-const groupList = ref([])
 const dialogVisible = ref(false)
 const dialogWidth = computed(() => getDialogWidth())
-const groupDialogVisible = ref(false)
 const dialogTitle = ref('创建消费者')
-const groupDialogTitle = ref('创建消费者组')
 const formRef = ref(null)
-const groupFormRef = ref(null)
-const enableBasicAuth = ref(false)
 const isEdit = ref(false)
-const isGroupEdit = ref(false)
 const consumerGroupList = ref([])
 const loadingGroups = ref(false)
+const pluginDialogVisible = ref(false)
+const currentConsumerId = ref('')
+const currentPluginType = ref('')
+const currentConsumerPlugins = ref({})
+
+// 获取可用于 consumer 类型的插件列表
+const availablePlugins = computed(() => {
+  return getPluginsByResourceType(RESOURCE_TYPES.CONSUMER)
+})
 
 // 分页配置
 const pagination = ref({
-  page: 1,
-  pageSize: 10,
-  total: 0
-})
-
-const groupPagination = ref({
   page: 1,
   pageSize: 10,
   total: 0
@@ -313,36 +214,11 @@ const form = ref({
   username: '',
   desc: '',
   group_id: '',
-  authUsername: '',
-  password: '',
-  labels: {}
-})
-
-const groupForm = ref({
-  id: '',
-  name: '',
-  desc: '',
   labels: {}
 })
 
 const rules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-  password: [
-    {
-      validator: (rule, value, callback) => {
-        if (enableBasicAuth.value && !value) {
-          callback(new Error('启用 Basic Auth 时必须输入密码'))
-        } else {
-          callback()
-        }
-      },
-      trigger: 'blur'
-    }
-  ]
-}
-
-const groupRules = {
-  // id 自动生成，不需要验证规则
+  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }]
 }
 
 // 加载 Consumer Group 列表（用于消费者表单中的选择器）
@@ -385,50 +261,22 @@ const getGroupName = (groupId) => {
 const loadData = async () => {
   loading.value = true
   try {
-    const config = getConfig()
     const response = await consumerApi.list({
       page: pagination.value.page,
       page_size: pagination.value.pageSize
     })
     const data = response.data
     if (data.list) {
-      const consumers = data.list.map(item => ({
-        ...item.value,
-        username: item.value.username || item.key,
-        create_time: item.value.create_time || item.create_time,
-        update_time: item.value.update_time || item.update_time
-      }))
-      
-      const consumersWithAuth = await Promise.all(
-        consumers.map(async (consumer) => {
-          try {
-            const credResponse = await axios.get(
-              `${config.baseURL}/apisix/admin/consumers/${consumer.username}/credentials`,
-              {
-                headers: {
-                  'X-API-KEY': config.adminKey
-                }
-              }
-            )
-            
-            const hasBasicAuth = credResponse.data?.list?.some(
-              item => item.value?.plugins?.['basic-auth']
-            ) || false
-            
-            return {
-              ...consumer,
-              hasBasicAuth
-            }
-          } catch (error) {
-            return {
-              ...consumer,
-              hasBasicAuth: false
-            }
-          }
-        })
-      )
-      
-      consumerList.value = consumersWithAuth
+      consumerList.value = data.list.map(item => {
+        const consumer = {
+          ...item.value,
+          username: item.value.username || item.key,
+          create_time: item.value.create_time || item.create_time,
+          update_time: item.value.update_time || item.update_time,
+          plugins: item.value.plugins || {}
+        }
+        return consumer
+      })
       pagination.value.total = data.total || 0
     } else {
       consumerList.value = []
@@ -441,47 +289,6 @@ const loadData = async () => {
   }
 }
 
-// 加载消费者组列表
-const loadGroupData = async () => {
-  groupLoading.value = true
-  try {
-    const response = await consumerGroupApi.list({
-      page: groupPagination.value.page,
-      page_size: groupPagination.value.pageSize
-    })
-    const data = response.data
-    if (data.list) {
-      groupList.value = data.list.map(item => {
-        const value = item.value || {}
-        let id = value.id
-        if (!id && item.key) {
-          const parts = item.key.split('/')
-          id = parts[parts.length - 1]
-        }
-        return {
-          ...value,
-          id: id || item.key,
-          create_time: value.create_time || item.create_time,
-          update_time: value.update_time || item.update_time
-        }
-      })
-      groupPagination.value.total = data.total || 0
-    } else {
-      groupList.value = []
-      groupPagination.value.total = 0
-    }
-  } catch (error) {
-    // 错误消息已由拦截器自动显示
-  } finally {
-    groupLoading.value = false
-  }
-}
-
-const handleTabChange = (tabName) => {
-  if (tabName === 'group') {
-    loadGroupData()
-  }
-}
 
 const handleSizeChange = (size) => {
   pagination.value.pageSize = size
@@ -494,113 +301,36 @@ const handlePageChange = (page) => {
   loadData()
 }
 
-const handleGroupSizeChange = (size) => {
-  groupPagination.value.pageSize = size
-  groupPagination.value.page = 1
-  loadGroupData()
-}
-
-const handleGroupPageChange = (page) => {
-  groupPagination.value.page = page
-  loadGroupData()
-}
-
 const handleAdd = () => {
-  if (activeTab.value === 'consumer') {
-    dialogTitle.value = '创建消费者'
-    isEdit.value = false
-    form.value = {
-      username: '',
-      desc: '',
-      group_id: '',
-      authUsername: '',
-      password: '',
-      labels: {}
-    }
-    enableBasicAuth.value = false
-    dialogVisible.value = true
-  } else {
-    groupDialogTitle.value = '创建消费者组'
-    isGroupEdit.value = false
-    groupForm.value = {
-      id: generateId('group'),
-      name: '',
-      desc: '',
-      labels: {}
-    }
-    groupDialogVisible.value = true
+  dialogTitle.value = '创建消费者'
+  isEdit.value = false
+  form.value = {
+    username: '',
+    desc: '',
+    group_id: '',
+    labels: {}
   }
+  dialogVisible.value = true
 }
 
 const handleEdit = async (row) => {
   dialogTitle.value = '编辑消费者'
   isEdit.value = true
   try {
-    const config = getConfig()
     const response = await consumerApi.get(row.username)
     const data = response.data.value
     form.value = {
       username: data.username || row.username,
       desc: data.desc || '',
       group_id: data.group_id || '',
-      authUsername: '',
-      password: '',
       labels: data.labels || row.labels || {}
     }
-    
-    try {
-      const credResponse = await axios.get(
-        `${config.baseURL}/apisix/admin/consumers/${form.value.username}/credentials`,
-        {
-          headers: {
-            'X-API-KEY': config.adminKey
-          }
-        }
-      )
-      
-      if (credResponse.data?.list && credResponse.data.list.length > 0) {
-        const basicAuthCred = credResponse.data.list.find(
-          item => item.value?.plugins?.['basic-auth']
-        )
-        
-        if (basicAuthCred) {
-          enableBasicAuth.value = true
-          const basicAuth = basicAuthCred.value.plugins['basic-auth']
-          form.value.authUsername = basicAuth.username || ''
-          form.value.password = ''
-        } else {
-          enableBasicAuth.value = false
-        }
-      } else {
-        enableBasicAuth.value = false
-      }
-    } catch (error) {
-      enableBasicAuth.value = false
-    }
-    
     dialogVisible.value = true
   } catch (error) {
     // 错误消息已由拦截器自动显示
   }
 }
 
-const handleGroupEdit = async (row) => {
-  groupDialogTitle.value = '编辑消费者组'
-  isGroupEdit.value = true
-  try {
-    const response = await consumerGroupApi.get(row.id)
-    const data = response.data.value
-    groupForm.value = {
-      id: data.id || row.id,
-      name: data.name || '',
-      desc: data.desc || '',
-      labels: data.labels || row.labels || {}
-    }
-    groupDialogVisible.value = true
-  } catch (error) {
-    // 错误消息已由拦截器自动显示
-  }
-}
 
 const handleSubmit = async () => {
   if (!formRef.value) return
@@ -609,8 +339,6 @@ const handleSubmit = async () => {
     if (!valid) return
 
     try {
-      const config = getConfig()
-      
       const consumerData = {
         username: form.value.username,
         desc: form.value.desc || undefined,
@@ -628,71 +356,6 @@ const handleSubmit = async () => {
         await consumerApi.create(form.value.username, consumerData)
       }
 
-      if (enableBasicAuth.value) {
-        if (!form.value.password) {
-          ElMessage.warning('启用 Basic Auth 时必须输入密码')
-          return
-        }
-
-        const credentialData = {
-          id: `cred-${form.value.username}-basic-auth`,
-          plugins: {
-            'basic-auth': {
-              username: form.value.authUsername || form.value.username,
-              password: form.value.password
-            }
-          }
-        }
-
-        try {
-          await axios.put(
-            `${config.baseURL}/apisix/admin/consumers/${form.value.username}/credentials`,
-            credentialData,
-            {
-              headers: {
-                'X-API-KEY': config.adminKey
-              }
-            }
-          )
-        } catch (error) {
-          ElMessage.error(getErrorMessage(error, '配置 Basic Auth 凭证失败'))
-          throw error
-        }
-      } else if (isEdit.value) {
-        try {
-          const credResponse = await axios.get(
-            `${config.baseURL}/apisix/admin/consumers/${form.value.username}/credentials`,
-            {
-              headers: {
-                'X-API-KEY': config.adminKey
-              }
-            }
-          )
-          
-          if (credResponse.data?.list && credResponse.data.list.length > 0) {
-            for (const item of credResponse.data.list) {
-              const credId = item.value?.id || item.key
-              if (item.value?.plugins?.['basic-auth'] || credId.includes('basic-auth')) {
-                try {
-                  await axios.delete(
-                    `${config.baseURL}/apisix/admin/consumers/${form.value.username}/credentials/${credId}`,
-                    {
-                      headers: {
-                        'X-API-KEY': config.adminKey
-                      }
-                    }
-                  )
-                } catch (delError) {
-                  console.warn('删除凭证失败:', delError)
-                }
-              }
-            }
-          }
-        } catch (error) {
-          console.warn('获取或删除 Basic Auth 凭证失败:', error)
-        }
-      }
-
       ElMessage.success(isEdit.value ? '更新成功' : '创建成功')
       dialogVisible.value = false
       loadData()
@@ -703,39 +366,6 @@ const handleSubmit = async () => {
   })
 }
 
-const handleGroupSubmit = async () => {
-  if (!groupFormRef.value) return
-  
-  await groupFormRef.value.validate(async (valid) => {
-    if (!valid) return
-
-    try {
-      const groupData = {
-        plugins: {}, // 暂时不需要配置插件
-        name: groupForm.value.name || undefined,
-        desc: groupForm.value.desc || undefined
-      }
-
-      // 添加标签
-      if (groupForm.value.labels && typeof groupForm.value.labels === 'object' && Object.keys(groupForm.value.labels).length > 0) {
-        groupData.labels = groupForm.value.labels
-      }
-
-      if (isGroupEdit.value) {
-        await consumerGroupApi.update(groupForm.value.id, groupData)
-      } else {
-        await consumerGroupApi.create(groupForm.value.id, groupData)
-      }
-
-      ElMessage.success(isGroupEdit.value ? '更新成功' : '创建成功')
-      groupDialogVisible.value = false
-      loadGroupData()
-      loadConsumerGroups() // 刷新消费者组列表，以便选择器更新
-    } catch (error) {
-      // 错误消息已由拦截器自动显示
-    }
-  })
-}
 
 const handleDelete = async (row) => {
   try {
@@ -750,28 +380,39 @@ const handleDelete = async (row) => {
   }
 }
 
-const handleGroupDelete = async (row) => {
-  try {
-    await ElMessageBox.confirm('确定要删除这个消费者组吗？', '提示', {
-      type: 'warning'
-    })
-    await consumerGroupApi.delete(row.id)
-    ElMessage.success('删除成功')
-    loadGroupData()
-    loadConsumerGroups() // 刷新消费者组列表
-  } catch (error) {
-    // 错误消息已由拦截器自动显示（用户取消操作除外）
+
+// 处理插件下拉菜单命令
+const handlePluginCommand = (row, command) => {
+  handleConfigPlugin(row, command)
+}
+
+// 配置单个插件
+const handleConfigPlugin = async (row, pluginType) => {
+  // 先关闭对话框（如果已打开），确保状态重置
+  if (pluginDialogVisible.value) {
+    pluginDialogVisible.value = false
+    await nextTick()
   }
+  
+  // 设置所有必要的值
+  currentConsumerId.value = row.username
+  currentPluginType.value = pluginType
+  currentConsumerPlugins.value = row.plugins || {}
+  
+  // 等待一个 tick 确保响应式更新完成
+  await nextTick()
+  
+  // 打开对话框
+  pluginDialogVisible.value = true
+}
+
+// 处理插件保存成功
+const handlePluginSaved = () => {
+  loadData()
 }
 
 const resetForm = () => {
   formRef.value?.resetFields()
-  enableBasicAuth.value = false
-  form.value.authUsername = ''
-}
-
-const resetGroupForm = () => {
-  groupFormRef.value?.resetFields()
 }
 
 onMounted(() => {
@@ -793,10 +434,6 @@ onMounted(() => {
   font-weight: 600;
   flex-wrap: wrap;
   gap: 12px;
-}
-
-.consumer-tabs {
-  min-height: 400px;
 }
 
 .action-bar {
@@ -830,6 +467,12 @@ onMounted(() => {
   width: 100%;
 }
 
+.action-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 /* 移动端适配 */
 @media (max-width: 768px) {
   .card-header {
@@ -847,15 +490,6 @@ onMounted(() => {
 
   .pagination-wrapper {
     justify-content: center;
-  }
-
-  :deep(.consumer-tabs .el-tabs__header) {
-    margin-bottom: 16px;
-  }
-
-  :deep(.consumer-tabs .el-tabs__item) {
-    padding: 0 12px;
-    font-size: 14px;
   }
 
   :deep(.el-table) {
@@ -876,11 +510,6 @@ onMounted(() => {
 @media (max-width: 480px) {
   .card-header {
     font-size: 14px;
-  }
-
-  :deep(.consumer-tabs .el-tabs__item) {
-    padding: 0 8px;
-    font-size: 12px;
   }
 
   :deep(.el-table) {

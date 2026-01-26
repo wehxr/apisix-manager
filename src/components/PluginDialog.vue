@@ -22,12 +22,14 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getDialogWidth } from '@/utils/format'
-import { getPluginName, PLUGIN_NAMES, isPluginAvailableForResource, RESOURCE_TYPES } from '@/utils/plugin'
+import { getPluginName, PLUGIN_NAMES, isPluginAvailableForResource, RESOURCE_TYPES, isPluginEnabled } from '@/utils/plugin'
 import { generateId } from '@/utils/id'
-import { routeApi, pluginConfigApi, globalRuleApi } from '@/utils/api'
+import { routeApi, pluginConfigApi, globalRuleApi, consumerApi } from '@/utils/api'
+import pluginResourcesConfig from '@/config/plugin-resources.json'
 
-// 插件组件映射（统一使用 PluginForm 组件，支持所有资源类型）
+// 静态导入所有插件组件
 import PluginFormRequestId from '@/components/PluginForm/PluginFormRequestId.vue'
+import PluginFormConsumerRestriction from '@/components/PluginForm/PluginFormConsumerRestriction.vue'
 import PluginFormBasicAuth from '@/components/PluginForm/PluginFormBasicAuth.vue'
 import PluginFormIpRestriction from '@/components/PluginForm/PluginFormIpRestriction.vue'
 import PluginFormCors from '@/components/PluginForm/PluginFormCors.vue'
@@ -42,6 +44,35 @@ import PluginFormUriBlocker from '@/components/PluginForm/PluginFormUriBlocker.v
 import PluginFormApiBreaker from '@/components/PluginForm/PluginFormApiBreaker.vue'
 import PluginFormGzip from '@/components/PluginForm/PluginFormGzip.vue'
 import PluginFormProxyRewrite from '@/components/PluginForm/PluginFormProxyRewrite.vue'
+
+// 组件映射表
+const componentMap = {
+  'PluginFormRequestId': PluginFormRequestId,
+  'PluginFormConsumerRestriction': PluginFormConsumerRestriction,
+  'PluginFormBasicAuth': PluginFormBasicAuth,
+  'PluginFormIpRestriction': PluginFormIpRestriction,
+  'PluginFormCors': PluginFormCors,
+  'PluginFormRealIp': PluginFormRealIp,
+  'PluginFormRedirect': PluginFormRedirect,
+  'PluginFormLimitReq': PluginFormLimitReq,
+  'PluginFormLimitCount': PluginFormLimitCount,
+  'PluginFormLimitConn': PluginFormLimitConn,
+  'PluginFormProxyCache': PluginFormProxyCache,
+  'PluginFormClientControl': PluginFormClientControl,
+  'PluginFormUriBlocker': PluginFormUriBlocker,
+  'PluginFormApiBreaker': PluginFormApiBreaker,
+  'PluginFormGzip': PluginFormGzip,
+  'PluginFormProxyRewrite': PluginFormProxyRewrite
+}
+
+// 将 kebab-case 转换为 PascalCase
+// 例如: ip-restriction -> IpRestriction -> PluginFormIpRestriction
+const kebabToPascal = (str) => {
+  return str
+    .split('-')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join('')
+}
 
 const props = defineProps({
   modelValue: {
@@ -73,55 +104,21 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'saved'])
 
-// 插件组件映射（统一使用 PluginForm 组件，支持所有资源类型）
-const pluginComponents = {
-  'request-id': {
-    [RESOURCE_TYPES.ROUTE]: PluginFormRequestId,
-    [RESOURCE_TYPES.GLOBAL_RULE]: PluginFormRequestId
-  },
-  'basic-auth': {
-    [RESOURCE_TYPES.ROUTE]: PluginFormBasicAuth
-  },
-  'ip-restriction': {
-    [RESOURCE_TYPES.ROUTE]: PluginFormIpRestriction
-  },
-  'cors': {
-    [RESOURCE_TYPES.ROUTE]: PluginFormCors,
-    [RESOURCE_TYPES.GLOBAL_RULE]: PluginFormCors
-  },
-  'real-ip': {
-    [RESOURCE_TYPES.ROUTE]: PluginFormRealIp,
-    [RESOURCE_TYPES.GLOBAL_RULE]: PluginFormRealIp
-  },
-  'redirect': {
-    [RESOURCE_TYPES.ROUTE]: PluginFormRedirect
-  },
-  'limit-req': {
-    [RESOURCE_TYPES.ROUTE]: PluginFormLimitReq
-  },
-  'limit-count': {
-    [RESOURCE_TYPES.ROUTE]: PluginFormLimitCount
-  },
-  'limit-conn': {
-    [RESOURCE_TYPES.ROUTE]: PluginFormLimitConn
-  },
-  'proxy-cache': {
-    [RESOURCE_TYPES.ROUTE]: PluginFormProxyCache
-  },
-  'client-control': {
-    [RESOURCE_TYPES.ROUTE]: PluginFormClientControl
-  },
-  'uri-blocker': {
-    [RESOURCE_TYPES.ROUTE]: PluginFormUriBlocker
-  },
-  'api-breaker': {
-    [RESOURCE_TYPES.ROUTE]: PluginFormApiBreaker
-  },
-  'gzip': {
-    [RESOURCE_TYPES.ROUTE]: PluginFormGzip
-  },
-  'proxy-rewrite': {
-    [RESOURCE_TYPES.ROUTE]: PluginFormProxyRewrite
+// 获取插件组件
+const getPluginComponent = (pluginType, resourceType) => {
+  const pluginConfig = pluginResourcesConfig.plugins[pluginType]
+  if (!pluginConfig) {
+    return null
+  }
+  
+  // 如果配置中有特殊组件映射，使用特殊组件
+  if (pluginConfig.components && pluginConfig.components[resourceType]) {
+    const componentName = pluginConfig.components[resourceType]
+    return componentMap[componentName] || null
+  } else {
+    // 否则使用约定规则：plugin-name -> PluginFormPluginName
+    const componentName = `PluginForm${kebabToPascal(pluginType)}`
+    return componentMap[componentName] || null
   }
 }
 
@@ -171,15 +168,8 @@ const openDialog = async (pluginType, resourceType) => {
     return
   }
 
-  // 获取对应的组件
-  const componentMap = pluginComponents[pluginType]
-  if (!componentMap) {
-    ElMessage.warning(`未知的插件类型: ${pluginType}`)
-    dialogVisible.value = false
-    return
-  }
-
-  const component = componentMap[resourceType]
+  // 从 JSON 配置中获取对应的组件
+  const component = getPluginComponent(pluginType, resourceType)
   if (!component) {
     ElMessage.warning(`插件 ${getPluginName(pluginType)} 没有对应的 ${resourceType} 组件`)
     dialogVisible.value = false
@@ -194,6 +184,8 @@ const openDialog = async (pluginType, resourceType) => {
     await initRouteConfig()
   } else if (resourceType === RESOURCE_TYPES.GLOBAL_RULE) {
     initGlobalRuleConfig()
+  } else if (resourceType === RESOURCE_TYPES.CONSUMER) {
+    await initConsumerConfig()
   } else {
     // 其他资源类型的初始化逻辑
     currentPluginConfig.value = { ...props.initialConfig }
@@ -244,6 +236,15 @@ const initGlobalRuleConfig = () => {
   }
 }
 
+// 初始化消费者配置（直接使用 plugins）
+const initConsumerConfig = () => {
+  const plugins = props.initialConfig.plugins || {}
+  // 传递所有 plugins，让组件自己处理（因为 usePluginConfig 会正确处理）
+  currentPluginConfig.value = {
+    plugins: plugins
+  }
+}
+
 // 处理插件配置更新
 const handlePluginConfigUpdate = (value) => {
   if (props.resourceType === RESOURCE_TYPES.ROUTE) {
@@ -252,8 +253,8 @@ const handlePluginConfigUpdate = (value) => {
       plugin_config_id: currentPluginConfig.value.plugin_config_id,
       plugins: value.plugins || {}
     }
-  } else if (props.resourceType === RESOURCE_TYPES.GLOBAL_RULE) {
-    // 对于 global_rule，合并 plugins
+  } else if (props.resourceType === RESOURCE_TYPES.GLOBAL_RULE || props.resourceType === RESOURCE_TYPES.CONSUMER) {
+    // 对于 global_rule 和 consumer，合并 plugins
     currentPluginConfig.value = {
       plugins: {
         ...(currentPluginConfig.value.plugins || {}),
@@ -273,6 +274,8 @@ const handleSave = async () => {
       await saveRoutePlugin()
     } else if (props.resourceType === RESOURCE_TYPES.GLOBAL_RULE) {
       await saveGlobalRulePlugin()
+    } else if (props.resourceType === RESOURCE_TYPES.CONSUMER) {
+      await saveConsumerPlugin()
     } else {
       ElMessage.warning(`暂不支持保存 ${props.resourceType} 类型的插件配置`)
     }
@@ -405,6 +408,90 @@ const saveGlobalRulePlugin = async () => {
 
   ElMessage.success('保存成功')
   emit('saved', { plugins: mergedPlugins })
+  dialogVisible.value = false
+}
+
+// 保存消费者插件配置
+const saveConsumerPlugin = async () => {
+  const plugins = currentPluginConfig.value.plugins || {}
+
+  // 所有插件（包括 basic-auth）都直接保存到 consumer 的 plugins
+  // 获取现有的消费者配置
+  try {
+    const existingConsumer = await consumerApi.get(props.resourceId)
+    const existingData = existingConsumer.data?.value || {}
+    const existingPlugins = existingData.plugins || props.initialConfig.plugins || {}
+    
+    // 合并插件配置
+    // 对于当前配置的插件，使用新配置（包括 _meta.disable 状态）
+    // 对于其他插件，保留原有配置
+    const mergedPlugins = { ...existingPlugins }
+    
+    Object.keys(plugins).forEach(pluginName => {
+      const pluginConfig = plugins[pluginName]
+      if (pluginConfig) {
+        const keys = Object.keys(pluginConfig)
+        // 如果插件配置只有 _meta.disable = true，保留它（表示禁用状态）
+        // 如果插件配置为空对象，删除它
+        if (keys.length === 0) {
+          // 空对象，删除插件
+          delete mergedPlugins[pluginName]
+        } else {
+          // 有配置，更新插件（包括 _meta.disable 状态）
+          mergedPlugins[pluginName] = { ...pluginConfig }
+        }
+      } else {
+        // pluginConfig 为 null/undefined，删除插件
+        delete mergedPlugins[pluginName]
+      }
+    })
+
+    // 更新消费者（只包含允许更新的字段，过滤掉只读字段如 create_time、update_time）
+    const consumerData = {
+      username: props.resourceId, // 确保包含 username 字段（必需）
+      plugins: mergedPlugins
+    }
+    
+    // 只添加允许更新的字段
+    if (existingData.desc !== undefined) {
+      consumerData.desc = existingData.desc
+    }
+    if (existingData.group_id !== undefined) {
+      consumerData.group_id = existingData.group_id
+    }
+    if (existingData.labels !== undefined) {
+      consumerData.labels = existingData.labels
+    }
+
+    await consumerApi.update(props.resourceId, consumerData)
+  } catch (error) {
+    console.warn('获取 consumer 配置失败，尝试只更新 plugins:', error)
+    // 如果获取失败，尝试只更新 plugins，但必须包含 username
+    const existingPlugins = props.initialConfig.plugins || {}
+    const mergedPlugins = { ...existingPlugins }
+    
+    Object.keys(plugins).forEach(pluginName => {
+      const pluginConfig = plugins[pluginName]
+      if (pluginConfig) {
+        const keys = Object.keys(pluginConfig)
+        if (keys.length === 0) {
+          delete mergedPlugins[pluginName]
+        } else {
+          mergedPlugins[pluginName] = { ...pluginConfig }
+        }
+      } else {
+        delete mergedPlugins[pluginName]
+      }
+    })
+    
+    await consumerApi.update(props.resourceId, { 
+      username: props.resourceId, // 确保包含 username 字段（必需）
+      plugins: mergedPlugins 
+    })
+  }
+
+  ElMessage.success('保存成功')
+  emit('saved', {})
   dialogVisible.value = false
 }
 

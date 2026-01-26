@@ -11,13 +11,17 @@
       "name": "生成请求ID",
       "resources": ["route", "global_rule"]
     },
+    "consumer-restriction": {
+      "name": "用户认证",
+      "resources": ["route"]
+    },
     "basic-auth": {
       "name": "基本认证",
-      "resources": ["route", "consumer"]
+      "resources": ["consumer"]
     },
     "ip-restriction": {
       "name": "IP 限制",
-      "resources": ["route"]
+      "resources": ["route", "consumer"]
     },
     "cors": {
       "name": "跨域策略",
@@ -37,7 +41,7 @@
     },
     "gzip": {
       "name": "Gzip压缩",
-      "resources": ["route"]
+      "resources": ["route", "global_rule"]
     },
     "proxy-cache": {
       "name": "代理缓存",
@@ -61,7 +65,7 @@
     },
     "limit-count": {
       "name": "请求数限流",
-      "resources": ["route"]
+      "resources": ["route", "consumer"]
     },
     "limit-conn": {
       "name": "并发连接数限制",

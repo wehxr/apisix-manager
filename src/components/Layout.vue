@@ -20,9 +20,33 @@
               <el-icon><Monitor /></el-icon>
               <span>上游服务</span>
             </router-link>
-            <router-link to="/consumer" class="nav-item" :class="{ active: activeMenu === '/consumer' }" @click="closeMobileMenu">
+            <div class="nav-item nav-item-dropdown" :class="{ active: isConsumerMenuActive }">
+              <el-dropdown trigger="hover" @command="handleConsumerMenuCommand" placement="bottom-start">
+                <span class="nav-item-content">
+                  <el-icon><User /></el-icon>
+                  <span>消费者</span>
+                  <el-icon class="dropdown-icon"><ArrowDown /></el-icon>
+                </span>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="/consumer" :class="{ 'is-active': activeMenu === '/consumer' }">
+                      消费者
+                    </el-dropdown-item>
+                    <el-dropdown-item command="/consumer-group" :class="{ 'is-active': activeMenu === '/consumer-group' }">
+                      消费者组
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+            <!-- 移动端直接显示两个菜单项 -->
+            <router-link to="/consumer" class="nav-item nav-item-mobile" :class="{ active: activeMenu === '/consumer' }" @click="closeMobileMenu">
               <el-icon><User /></el-icon>
               <span>消费者</span>
+            </router-link>
+            <router-link to="/consumer-group" class="nav-item nav-item-mobile" :class="{ active: activeMenu === '/consumer-group' }" @click="closeMobileMenu">
+              <el-icon><User /></el-icon>
+              <span>消费者组</span>
             </router-link>
             <router-link to="/ssl" class="nav-item" :class="{ active: activeMenu === '/ssl' }" @click="closeMobileMenu">
               <el-icon><Lock /></el-icon>
@@ -59,12 +83,17 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { useRoute } from 'vue-router'
-import { Lock, User, Monitor, Connection, Setting, Odometer, Menu, Close, Tools } from '@element-plus/icons-vue'
+import { useRoute, useRouter } from 'vue-router'
+import { Lock, User, Monitor, Connection, Setting, Odometer, Menu, Close, Tools, ArrowDown } from '@element-plus/icons-vue'
 
 const route = useRoute()
+const router = useRouter()
 const activeMenu = computed(() => route.path)
 const mobileMenuOpen = ref(false)
+
+const isConsumerMenuActive = computed(() => {
+  return activeMenu.value === '/consumer' || activeMenu.value === '/consumer-group'
+})
 
 const toggleMobileMenu = () => {
   mobileMenuOpen.value = !mobileMenuOpen.value
@@ -72,6 +101,11 @@ const toggleMobileMenu = () => {
 
 const closeMobileMenu = () => {
   mobileMenuOpen.value = false
+}
+
+const handleConsumerMenuCommand = (command) => {
+  router.push(command)
+  closeMobileMenu()
 }
 </script>
 
@@ -171,6 +205,36 @@ const closeMobileMenu = () => {
   flex-shrink: 0;
 }
 
+.nav-item-dropdown {
+  position: relative;
+}
+
+.nav-item-content {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.dropdown-icon {
+  margin-left: 4px;
+  margin-right: 0;
+  font-size: 12px;
+  transition: transform 0.3s;
+}
+
+.nav-item-dropdown:hover .dropdown-icon {
+  transform: rotate(180deg);
+}
+
+.nav-item-mobile {
+  display: none;
+}
+
+:deep(.el-dropdown-menu__item.is-active) {
+  color: var(--el-color-primary);
+  background-color: var(--el-color-primary-light-9);
+}
+
 .header-actions {
   display: flex;
   align-items: center;
@@ -244,6 +308,14 @@ const closeMobileMenu = () => {
   .nav-menu.mobile-menu-open {
     max-height: 500px;
     padding: 10px 0;
+  }
+
+  .nav-item-dropdown {
+    display: none;
+  }
+
+  .nav-item-mobile {
+    display: inline-flex !important;
   }
 
   .nav-item {
