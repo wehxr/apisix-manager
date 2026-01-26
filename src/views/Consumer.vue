@@ -26,7 +26,7 @@
             </el-table-column>
             <el-table-column prop="plugins" label="插件">
               <template #default="{ row }">
-                <el-tag v-if="row.hasBasicAuth" type="success" size="small">Basic Auth</el-tag>
+                <el-tag v-if="row.hasBasicAuth" size="small">Basic Auth</el-tag>
                 <span v-else style="color: #909399">-</span>
               </template>
             </el-table-column>

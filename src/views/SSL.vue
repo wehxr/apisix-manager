@@ -16,9 +16,9 @@
         <el-table-column prop="id" label="ID" width="150" />
         <el-table-column prop="snis" label="域名" min-width="250">
           <template #default="{ row }">
-            <div style="display: flex; flex-wrap: wrap; gap: 4px;">
-              <el-tag v-for="sni in (row.snis || [])" :key="sni" size="small">{{ sni }}</el-tag>
-              <span v-if="!row.snis || row.snis.length === 0" style="color: #909399">-</span>
+            <span v-if="!row.snis || row.snis.length === 0" style="color: #909399">-</span>
+            <div v-else style="display: flex; flex-direction: column; gap: 4px;">
+              <el-tag style="width: fit-content;" v-for="sni in (row.snis || [])" :key="sni" size="small">{{ sni }}</el-tag>
             </div>
           </template>
         </el-table-column>
@@ -31,19 +31,19 @@
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="row.status === 1 ? 'success' : 'info'" size="small">
+            <el-tag :type="row.status === 1 ? 'primary' : 'info'" size="small">
               {{ row.status === 1 ? '启用' : '禁用' }}
             </el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="ssl_protocols" label="SSL 协议" width="200">
           <template #default="{ row }">
-            <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+            <div style="display: flex; flex-direction: column; gap: 4px;">
               <el-tag
                 v-for="protocol in (row.ssl_protocols || [])"
                 :key="protocol"
                 size="small"
-                type="info"
+                style="width: fit-content;"
               >
                 {{ protocol }}
               </el-tag>

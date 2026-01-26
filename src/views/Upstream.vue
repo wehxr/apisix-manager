@@ -27,22 +27,34 @@
                 </el-tag>
               </div>
             </div>
+            <div v-else-if="row.service_name">
+              <el-tag size="small">
+                {{ row.service_name }}
+              </el-tag>
+            </div>
+            <span v-else style="color: #909399">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="discovery" label="服务发现" width="120">
+          <template #default="{ row }">
+            <el-tag v-if="row.discovery_type" size="small">
+              {{ row.discovery_type }}
+            </el-tag>
             <span v-else style="color: #909399">-</span>
           </template>
         </el-table-column>
         <el-table-column prop="type" label="负载均衡" width="130">
           <template #default="{ row }">
             <el-tag size="small" type="primary">
-              {{ row.type === 'roundrobin' ? '轮询' : row.type === 'chash' ? '一致性哈希' : row.type === 'least_conn' ? '最少连接' : row.type || '轮询' }}
+              {{ row.type === 'roundrobin' ? '轮询' : row.type === 'chash' ? '一致性哈希' : row.type === 'least_conn' ? '最少连接' : row.type === 'ewma' ? 'EWMA' : row.type || '轮询' }}
             </el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="scheme" label="协议类型" width="120">
           <template #default="{ row }">
-            <el-tag v-if="row.scheme" size="small" type="info">
+            <el-tag size="small">
               {{ row.scheme.toUpperCase() }}
             </el-tag>
-            <span v-else style="color: #909399">默认</span>
           </template>
         </el-table-column>
         <el-table-column prop="retries" label="重试次数" width="100">
@@ -60,8 +72,8 @@
         </el-table-column>
         <el-table-column prop="checks" label="健康检测" width="100">
           <template #default="{ row }">
-            <el-tag v-if="row.checks?.active" type="success" size="small">已启用</el-tag>
-            <span v-else style="color: #909399">未启用</span>
+            <el-tag v-if="row.checks?.active" size="small">已启用</el-tag>
+            <el-tag v-else type="info" size="small">未启用</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="desc" label="描述" min-width="150" show-overflow-tooltip />
@@ -131,9 +143,10 @@
             </el-form-item>
         <el-form-item label="负载均衡类型" prop="type">
           <el-select v-model="form.type" style="width: 100%">
-            <el-option label="轮询 (roundrobin)" value="roundrobin" />
+            <el-option label="加权轮询 (roundrobin)" value="roundrobin" />
             <el-option label="一致性哈希 (chash)" value="chash" />
-            <el-option label="最少连接 (least_conn)" value="least_conn" />
+            <el-option label="最小连接数 (least_conn)" value="least_conn" />
+            <el-option label="选择延迟最小的节点 (ewma)" value="ewma" />
           </el-select>
         </el-form-item>
         <template v-if="form.type === 'chash'">
@@ -168,7 +181,17 @@
 
           <!-- 步骤 2: 节点配置 -->
           <div v-show="currentStep === 1">
-            <el-form-item label="上游节点" prop="nodes" required>
+            <el-form-item label="配置方式" prop="upstreamMode">
+              <el-radio-group v-model="upstreamMode">
+                <el-radio label="nodes">节点配置</el-radio>
+                <el-radio label="discovery">服务发现</el-radio>
+              </el-radio-group>
+              <div class="form-tip">选择使用节点配置或服务发现来配置上游服务</div>
+            </el-form-item>
+
+            <!-- 节点配置模式 -->
+            <template v-if="upstreamMode === 'nodes'">
+              <el-form-item label="上游节点" prop="nodes" required>
               <el-table :data="nodeList" border style="width: 100%">
                 <el-table-column label="节点地址" min-width="300">
                   <template #default="{ row, $index }">
@@ -209,7 +232,29 @@
               >
                 添加节点
               </el-button>
-            </el-form-item>
+              </el-form-item>
+            </template>
+
+            <!-- 服务发现模式 -->
+            <template v-if="upstreamMode === 'discovery'">
+              <el-form-item label="服务发现类型" prop="discovery_type" required>
+                <el-select v-model="form.discovery_type" style="width: 100%" placeholder="选择服务发现类型">
+                  <el-option label="Eureka" value="eureka" />
+                  <el-option label="Consul" value="consul" />
+                  <el-option label="Nacos" value="nacos" />
+                  <el-option label="DNS" value="dns" />
+                  <el-option label="Kubernetes" value="kubernetes" />
+                </el-select>
+                <div class="form-tip">选择服务发现注册中心的类型</div>
+              </el-form-item>
+              <el-form-item label="服务名称" prop="service_name" required>
+                <el-input
+                  v-model="form.service_name"
+                  placeholder="请输入服务发现时使用的服务名"
+                />
+                <div class="form-tip">服务发现时使用的服务名，例如：a-bootiful-client</div>
+              </el-form-item>
+            </template>
 
             <el-divider>协议配置</el-divider>
             <el-form-item label="协议类型" prop="scheme">
@@ -453,7 +498,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import { upstreamApi } from '../utils/api'
@@ -485,6 +530,7 @@ const formRef = ref(null)
 const nodeList = ref([{ host: '', weight: 100 }])
 const currentStep = ref(0)
 const enableHealthCheck = ref(false)
+const upstreamMode = ref('nodes') // 'nodes' 或 'discovery'
 
 // 分页配置
 const pagination = ref({
@@ -500,6 +546,8 @@ const form = ref({
   type: 'roundrobin',
   scheme: 'http',
   nodes: {},
+  service_name: undefined,
+  discovery_type: undefined,
   labels: {},
   timeout: {
     connect: 3,
@@ -538,7 +586,31 @@ const rules = {
   name: [
     { required: true, message: '请输入上游服务名称', trigger: 'blur' }
   ],
-  type: [{ required: true, message: '请选择负载均衡类型', trigger: 'blur' }]
+  type: [{ required: true, message: '请选择负载均衡类型', trigger: 'blur' }],
+  discovery_type: [
+    { 
+      validator: (rule, value, callback) => {
+        if (upstreamMode.value === 'discovery' && !value) {
+          callback(new Error('请选择服务发现类型'))
+        } else {
+          callback()
+        }
+      }, 
+      trigger: 'change' 
+    }
+  ],
+  service_name: [
+    { 
+      validator: (rule, value, callback) => {
+        if (upstreamMode.value === 'discovery' && (!value || !value.trim())) {
+          callback(new Error('请输入服务名称'))
+        } else {
+          callback()
+        }
+      }, 
+      trigger: 'blur' 
+    }
+  ]
 }
 
 
@@ -591,6 +663,7 @@ const removeNode = (index) => {
 const handleAdd = () => {
   dialogTitle.value = '添加上游'
   isEdit.value = false
+  upstreamMode.value = 'nodes'
   form.value = {
     id: generateRandomId(),
     name: '',
@@ -598,6 +671,8 @@ const handleAdd = () => {
     type: 'roundrobin',
     scheme: 'http',
     nodes: {},
+    service_name: undefined,
+    discovery_type: undefined,
     labels: {},
     timeout: {
       connect: 3,
@@ -644,6 +719,14 @@ const handleAdd = () => {
 const handleEdit = (row) => {
   dialogTitle.value = '编辑上游'
   isEdit.value = true
+  
+  // 判断使用哪种模式
+  if (row.service_name && row.discovery_type) {
+    upstreamMode.value = 'discovery'
+  } else {
+    upstreamMode.value = 'nodes'
+  }
+  
   form.value = {
     id: row.id,
     name: row.name || '',
@@ -651,6 +734,8 @@ const handleEdit = (row) => {
     type: row.type || 'roundrobin',
     scheme: row.scheme || 'http',
     nodes: row.nodes || {},
+    service_name: row.service_name || undefined,
+    discovery_type: row.discovery_type || undefined,
     labels: row.labels || {},
     timeout: row.timeout || {
       connect: 3,
@@ -770,25 +855,36 @@ const handleSubmit = async () => {
     return
   }
 
-  // 验证节点配置
-  const nodes = {}
-  for (const node of nodeList.value) {
-    if (!node.host || !node.host.trim()) {
-      ElMessage.warning('请填写所有节点的地址')
-      return
+  // 根据配置方式验证
+  if (upstreamMode.value === 'nodes') {
+    // 验证节点配置
+    const nodes = {}
+    for (const node of nodeList.value) {
+      if (!node.host || !node.host.trim()) {
+        ElMessage.warning('请填写所有节点的地址')
+        return
+      }
+      const host = node.host.trim()
+      const weight = parseInt(node.weight) || 100
+      if (weight < 1 || weight > 1000) {
+        ElMessage.warning('节点权重必须在 1-1000 之间')
+        return
+      }
+      nodes[host] = weight
     }
-    const host = node.host.trim()
-    const weight = parseInt(node.weight) || 100
-    if (weight < 1 || weight > 1000) {
-      ElMessage.warning('节点权重必须在 1-1000 之间')
-      return
-    }
-    nodes[host] = weight
-  }
 
-  if (Object.keys(nodes).length === 0) {
-    ElMessage.warning('请至少添加一个节点')
-    return
+    if (Object.keys(nodes).length === 0) {
+      ElMessage.warning('请至少添加一个节点')
+      return
+    }
+  } else if (upstreamMode.value === 'discovery') {
+    // 验证服务发现配置
+    try {
+      await formRef.value.validateField('discovery_type')
+      await formRef.value.validateField('service_name')
+    } catch (error) {
+      return
+    }
   }
 
   // 验证一致性哈希配置
@@ -808,8 +904,22 @@ const handleSubmit = async () => {
       id: form.value.id,
       name: form.value.name,
       desc: form.value.desc || undefined,
-      type: form.value.type,
-      nodes: nodes
+      type: form.value.type
+    }
+
+    // 根据配置方式设置 nodes 或 service_name + discovery_type
+    if (upstreamMode.value === 'nodes') {
+      // 构建 nodes 对象
+      const nodes = {}
+      for (const node of nodeList.value) {
+        const host = node.host.trim()
+        const weight = parseInt(node.weight) || 100
+        nodes[host] = weight
+      }
+      upstreamData.nodes = nodes
+    } else if (upstreamMode.value === 'discovery') {
+      upstreamData.service_name = form.value.service_name
+      upstreamData.discovery_type = form.value.discovery_type
     }
 
     // 添加协议类型
@@ -928,6 +1038,7 @@ const handleDelete = async (row) => {
 
 const resetForm = () => {
   formRef.value?.resetFields()
+  upstreamMode.value = 'nodes'
   nodeList.value = [{ host: '', weight: 100 }]
   enableHealthCheck.value = false
   currentStep.value = 0
@@ -945,10 +1056,19 @@ const nextStep = async () => {
       return
     }
   } else if (currentStep.value === 1) {
-    // 验证节点配置
-    if (!nodeList.value || nodeList.value.length === 0 || !nodeList.value.some(n => n.host)) {
-      ElMessage.warning('请至少配置一个有效的上游节点')
-      return
+    // 验证节点配置或服务发现配置
+    if (upstreamMode.value === 'nodes') {
+      if (!nodeList.value || nodeList.value.length === 0 || !nodeList.value.some(n => n.host && n.host.trim())) {
+        ElMessage.warning('请至少配置一个有效的上游节点')
+        return
+      }
+    } else if (upstreamMode.value === 'discovery') {
+      try {
+        await formRef.value.validateField('discovery_type')
+        await formRef.value.validateField('service_name')
+      } catch (error) {
+        return
+      }
     }
   }
   
@@ -962,6 +1082,19 @@ const prevStep = () => {
     currentStep.value--
   }
 }
+
+// 监听配置模式切换，清理不需要的字段
+watch(upstreamMode, (newMode) => {
+  if (newMode === 'nodes') {
+    // 切换到节点模式，清理服务发现字段
+    form.value.service_name = undefined
+    form.value.discovery_type = undefined
+  } else if (newMode === 'discovery') {
+    // 切换到服务发现模式，清理节点字段
+    form.value.nodes = {}
+    nodeList.value = [{ host: '', weight: 100 }]
+  }
+})
 
 onMounted(() => {
   loadData()

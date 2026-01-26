@@ -16,7 +16,8 @@
         <el-table-column prop="name" label="名称" width="150" />
         <el-table-column prop="uris" label="路径" min-width="150">
           <template #default="{ row }">
-            <div style="display: flex; flex-direction: column; gap: 4px;">
+            <span v-if="!row.uris || row.uris.length === 0" style="color: #909399">-</span>
+            <div v-else style="display: flex; flex-direction: column; gap: 4px;">
               <el-tag
                 v-for="uri in (row.uris || [])"
                 :key="uri"
@@ -25,13 +26,13 @@
               >
                 {{ uri }}
               </el-tag>
-              <span v-if="!row.uris || row.uris.length === 0" style="color: #909399">-</span>
             </div>
           </template>
         </el-table-column>
         <el-table-column prop="hosts" label="域名" min-width="180">
           <template #default="{ row }">
-            <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+            <span v-if="!row.hosts || row.hosts.length === 0" style="color: #909399">全部</span>
+            <div v-else style="display: flex; flex-direction: column; gap: 4px;">
               <el-tag
                 v-for="host in (row.hosts || [])"
                 :key="host"
@@ -40,14 +41,18 @@
               >
                 {{ host }}
               </el-tag>
-              <span v-if="!row.hosts || row.hosts.length === 0" style="color: #909399">全部</span>
             </div>
           </template>
         </el-table-column>
         <el-table-column prop="methods" label="HTTP 方法" width="180">
           <template #default="{ row }">
             <div style="display: flex; flex-wrap: wrap; gap: 4px;">
-              <span v-if="!row.methods || row.methods.length === 0 || isAllMethodsSelected(row.methods)" style="color: #909399">全部</span>
+              <el-tag
+                v-if="!row.methods || row.methods.length === 0 || isAllMethodsSelected(row.methods)"
+                size="small"
+              >
+                全部
+              </el-tag>
               <el-tag
                 v-else
                 v-for="method in (row.methods || [])"
@@ -62,19 +67,13 @@
         </el-table-column>
         <el-table-column prop="upstream_id" label="上游服务" width="200">
           <template #default="{ row }">
-            <span v-if="row.upstream_id">
+            <el-tag size="small" v-if="row.upstream_id">
               {{ getUpstreamName(row.upstream_id) || row.upstream_id }}
-            </span>
+              </el-tag>
             <span v-else style="color: #909399">-</span>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.status === 1 ? 'success' : 'info'" size="small">
-              {{ row.status === 1 ? '启用' : '禁用' }}
-            </el-tag>
-          </template>
-        </el-table-column>
+
         <el-table-column prop="plugins" label="插件" min-width="250">
           <template #default="{ row }">
             <div style="display: flex; flex-wrap: wrap; gap: 4px;">
@@ -88,6 +87,13 @@
               </template>
               <span v-if="!row.plugins || !Object.keys(row.plugins || {}).some(key => key !== 'consumer-restriction' && isPluginEnabled(row.plugins[key], key, row.plugins))" style="color: #909399">-</span>
             </div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="status" label="状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 1 ? 'primary' : 'info'" size="small">
+              {{ row.status === 1 ? '启用' : '禁用' }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="desc" label="描述" min-width="150" show-overflow-tooltip />
@@ -129,7 +135,13 @@
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item command="copy">复制</el-dropdown-item>
-                    <el-dropdown-item style="color:#e71414;" command="delete" divided>删除</el-dropdown-item>
+                    <el-dropdown-item 
+                      :command="row.status === 1 ? 'disable' : 'enable'"
+                      :style="row.status === 1 ? 'color:#e71414;' : ''"
+                    >
+                      {{ row.status === 1 ? '禁用' : '启用' }}
+                    </el-dropdown-item>
+                    <el-dropdown-item style="color:#e71414;" command="delete">删除</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
@@ -195,7 +207,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, ArrowDown } from '@element-plus/icons-vue'
 import { routeApi, upstreamApi, pluginConfigApi } from '../utils/api'
 import { formatTimestamp, getDialogWidth } from '../utils/format'
-import { isPluginEnabled, setPluginEnabled, getPluginName, PLUGIN_NAMES } from '../utils/plugin'
+import { isPluginEnabled, getPluginName, PLUGIN_NAMES } from '../utils/plugin'
 
 // 响应式分页布局
 const paginationLayout = computed(() => {
@@ -278,28 +290,6 @@ const getUpstreamName = (upstreamId) => {
   return upstream?.name || ''
 }
 
-const rules = {
-  name: [
-    { required: true, message: '请输入路由名称', trigger: 'blur' }
-  ],
-  uris: [{ required: true, message: '请输入路径', trigger: 'blur' }],
-  hosts: [
-    { required: true, message: '请输入至少一个域名', trigger: 'change' }
-  ],
-  upstream_id: [{ required: true, message: '请选择上游服务', trigger: 'blur' }],
-  methods: [
-    {
-      validator: (rule, value, callback) => {
-        if (!value || value.length === 0) {
-          callback(new Error('至少选择一个 HTTP 方法'))
-        } else {
-          callback()
-        }
-      },
-      trigger: 'change'
-    }
-  ]
-}
 
 
 // 处理表单更新
@@ -311,6 +301,8 @@ const handleFormUpdate = (value) => {
 const handleActionCommand = (row, command) => {
   if (command === 'copy') {
     handleCopy(row)
+  } else if (command === 'enable' || command === 'disable') {
+    handleToggleStatus(row, command)
   } else if (command === 'delete') {
     handleDelete(row)
   }
@@ -958,6 +950,47 @@ const handleCopy = async (row) => {
     } catch (error2) {
       // 错误消息已由拦截器自动显示
     }
+  }
+}
+
+// 切换路由状态（启用/禁用）
+const handleToggleStatus = async (row, command) => {
+  try {
+    const newStatus = command === 'enable' ? 1 : 0
+    const statusText = newStatus === 1 ? '启用' : '禁用'
+    
+    await ElMessageBox.confirm(
+      `确定要${statusText}这个路由吗？`,
+      '提示',
+      {
+        type: 'warning'
+      }
+    )
+    
+    // 获取路由详情，保留所有字段
+    const routeRes = await routeApi.get(row.id)
+    const routeData = routeRes.data?.value || routeRes.data || {}
+    
+    // 准备更新数据，保留所有允许的字段
+    const allowedFields = ['id', 'name', 'uris', 'hosts', 'methods', 'priority', 'status', 
+                           'enable_websocket', 'timeout', 'upstream_id', 'desc', 'vars', 'labels', 'plugin_config_id']
+    const updateData = {}
+    
+    allowedFields.forEach(key => {
+      if (routeData[key] !== undefined) {
+        updateData[key] = routeData[key]
+      }
+    })
+    
+    // 更新状态
+    updateData.status = newStatus
+    
+    // 更新路由
+    await routeApi.update(row.id, updateData)
+    ElMessage.success(`${statusText}成功`)
+    loadData()
+  } catch (error) {
+    // 错误消息已由拦截器自动显示（用户取消操作除外）
   }
 }
 
