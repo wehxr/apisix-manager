@@ -237,6 +237,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { consumerApi, consumerGroupApi, getConfig, getErrorMessage } from '../utils/api'
 import { formatTimestamp, getDialogWidth } from '../utils/format'
+import { generateId } from '../utils/id'
 import axios from 'axios'
 import LabelsInput from '../components/LabelsInput.vue'
 
@@ -276,11 +277,6 @@ const groupPaginationLayout = computed(() => {
     return 'total, sizes, prev, pager, next, jumper'
   }
 })
-
-// 生成随机 ID
-const generateRandomId = () => {
-  return 'group_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 9)
-}
 
 const activeTab = ref('consumer')
 const loading = ref(false)
@@ -527,7 +523,7 @@ const handleAdd = () => {
     groupDialogTitle.value = '创建消费者组'
     isGroupEdit.value = false
     groupForm.value = {
-      id: generateRandomId(),
+      id: generateId('group'),
       name: '',
       desc: '',
       labels: {}

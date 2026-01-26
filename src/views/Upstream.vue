@@ -503,6 +503,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import { upstreamApi } from '../utils/api'
 import { formatTimestamp, getDialogWidth } from '../utils/format'
+import { generateId } from '../utils/id'
 import LabelsInput from '../components/LabelsInput.vue'
 
 // 响应式分页布局
@@ -576,11 +577,6 @@ const form = ref({
     }
   }
 })
-
-// 生成随机 ID
-const generateRandomId = () => {
-  return 'upstream_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 9)
-}
 
 const rules = {
   name: [
@@ -665,7 +661,7 @@ const handleAdd = () => {
   isEdit.value = false
   upstreamMode.value = 'nodes'
   form.value = {
-    id: generateRandomId(),
+    id: generateId('upstream'),
     name: '',
     desc: '',
     type: 'roundrobin',

@@ -52,14 +52,22 @@ export function isPluginEnabled(pluginConfig, pluginKey = null, allPlugins = nul
   const keys = Object.keys(pluginConfig)
   if (keys.length === 0) return false
   
-  // 如果只有 _meta 字段且 _meta 为空，也视为未配置
+  // 如果只有 _meta 字段，需要检查 _meta 的内容
   if (keys.length === 1 && keys[0] === '_meta') {
-    const metaKeys = Object.keys(pluginConfig._meta || {})
-    if (metaKeys.length === 0) return false
+    const meta = pluginConfig._meta || {}
+    const metaKeys = Object.keys(meta)
+    // 如果 _meta 为空，或者只有 disable: true，则视为未配置
+    if (metaKeys.length === 0 || (metaKeys.length === 1 && meta.disable === true)) {
+      return false
+    }
+    // 如果 _meta 有内容且 disable 不为 true，则视为启用（虽然这种情况很少见）
+    return true
   }
   
-  // 插件存在且有实际配置且未禁用，则认为启用
-  return true
+  // 插件存在且有实际配置（除了 _meta 之外还有其他字段）且未禁用，则认为启用
+  // 检查是否有除了 _meta 之外的其他配置项
+  const hasConfig = keys.some(key => key !== '_meta')
+  return hasConfig
 }
 
 // 设置插件的启用/禁用状态

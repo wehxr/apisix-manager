@@ -28,6 +28,10 @@
               <el-icon><Lock /></el-icon>
               <span>证书管理</span>
             </router-link>
+            <router-link to="/global-rule" class="nav-item" :class="{ active: activeMenu === '/global-rule' }" @click="closeMobileMenu">
+              <el-icon><Tools /></el-icon>
+              <span>全局规则</span>
+            </router-link>
           </div>
           <div class="header-actions">
             <router-link to="/settings" class="nav-item settings-item" :class="{ active: activeMenu === '/settings' }" @click="closeMobileMenu">
@@ -56,7 +60,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Lock, User, Monitor, Connection, Setting, Odometer, Menu, Close } from '@element-plus/icons-vue'
+import { Lock, User, Monitor, Connection, Setting, Odometer, Menu, Close, Tools } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const activeMenu = computed(() => route.path)

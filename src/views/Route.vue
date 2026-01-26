@@ -208,6 +208,7 @@ import { Plus, ArrowDown } from '@element-plus/icons-vue'
 import { routeApi, upstreamApi, pluginConfigApi } from '../utils/api'
 import { formatTimestamp, getDialogWidth } from '../utils/format'
 import { isPluginEnabled, getPluginName, PLUGIN_NAMES } from '../utils/plugin'
+import { generateId } from '../utils/id'
 
 // 响应式分页布局
 const paginationLayout = computed(() => {
@@ -278,11 +279,6 @@ const form = ref({
     read: 3
   }
 })
-
-// 生成随机 ID
-const generateRandomId = () => {
-  return 'route_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 9)
-}
 
 // 根据 upstream_id 获取上游服务名称
 const getUpstreamName = (upstreamId) => {
@@ -368,7 +364,7 @@ const handleConfigPlugin = async (row, pluginType) => {
   // 如果没有 plugin_config_id，创建一个空的 Plugin Config
   if (!pluginConfigId) {
     try {
-      pluginConfigId = `plugin_config_${row.id}_${Date.now()}`
+      pluginConfigId = generateId('plugin_config')
       await pluginConfigApi.create(pluginConfigId, {
         plugins: {}
       })
@@ -461,7 +457,7 @@ const handleSavePlugin = async () => {
     let pluginConfigId = currentPluginConfig.value.plugin_config_id || routeData.plugin_config_id
     
     if (!pluginConfigId) {
-      pluginConfigId = `plugin_config_${currentRouteId.value}_${Date.now()}`
+      pluginConfigId = generateId('plugin_config')
     }
     
     // 更新或创建 Plugin Config
@@ -615,7 +611,7 @@ const handlePageChange = (page) => {
 const handleAdd = async () => {
   dialogTitle.value = '创建路由'
   form.value = {
-    id: generateRandomId(),
+    id: generateId('route'),
     name: '',
     uris: [],
     hosts: [],
@@ -786,7 +782,7 @@ const handleSubmit = async () => {
         
         // 创建路由后，默认创建一个空的 Plugin Config
         try {
-          const pluginConfigId = `plugin_config_${form.value.id}_${Date.now()}`
+          const pluginConfigId = generateId('plugin_config')
           await pluginConfigApi.create(pluginConfigId, {
             plugins: {}
           })
@@ -819,7 +815,7 @@ const handleCopy = async (row) => {
     const routeData = routeRes.data?.value || routeRes.data || {}
     
     // 生成新的路由ID
-    const newRouteId = generateRandomId()
+    const newRouteId = generateId('route')
     
     // 准备复制数据，移除禁止的字段
     const allowedFields = ['name', 'uris', 'hosts', 'methods', 'priority', 'status', 
@@ -845,7 +841,7 @@ const handleCopy = async (row) => {
       try {
         const pluginConfigRes = await pluginConfigApi.get(routeData.plugin_config_id)
         const pluginConfigData = pluginConfigRes.data?.value || pluginConfigRes.data || {}
-        const newPluginConfigId = `plugin_config_${newRouteId}_${Date.now()}`
+        const newPluginConfigId = generateId('plugin_config')
         await pluginConfigApi.create(newPluginConfigId, {
           plugins: pluginConfigData.plugins ? JSON.parse(JSON.stringify(pluginConfigData.plugins)) : {}
         })
@@ -853,7 +849,7 @@ const handleCopy = async (row) => {
       } catch (error) {
         // 如果获取 Plugin Config 失败，仍然创建一个空的 Plugin Config
         try {
-          const newPluginConfigId = `plugin_config_${newRouteId}_${Date.now()}`
+          const newPluginConfigId = generateId('plugin_config')
           await pluginConfigApi.create(newPluginConfigId, {
             plugins: {}
           })
@@ -865,7 +861,7 @@ const handleCopy = async (row) => {
     } else {
       // 如果原路由没有 plugin_config_id，创建一个空的 Plugin Config
       try {
-        const newPluginConfigId = `plugin_config_${newRouteId}_${Date.now()}`
+        const newPluginConfigId = generateId('plugin_config')
         await pluginConfigApi.create(newPluginConfigId, {
           plugins: {}
         })
@@ -889,7 +885,7 @@ const handleCopy = async (row) => {
   } catch (error) {
     // 如果获取详情失败，使用 row 数据
     try {
-      const newRouteId = generateRandomId()
+      const newRouteId = generateId('route')
       const copyData = {
         id: newRouteId,
         name: (row.name || '路由') + ' - 副本',
@@ -914,7 +910,7 @@ const handleCopy = async (row) => {
         try {
           const pluginConfigRes = await pluginConfigApi.get(row.plugin_config_id)
           const pluginConfigData = pluginConfigRes.data?.value || pluginConfigRes.data || {}
-          const newPluginConfigId = `plugin_config_${newRouteId}_${Date.now()}`
+          const newPluginConfigId = generateId('plugin_config')
           await pluginConfigApi.create(newPluginConfigId, {
             plugins: pluginConfigData.plugins ? JSON.parse(JSON.stringify(pluginConfigData.plugins)) : {}
           })
@@ -922,7 +918,7 @@ const handleCopy = async (row) => {
         } catch (error) {
           // 如果获取 Plugin Config 失败，仍然创建一个空的 Plugin Config
           try {
-            const newPluginConfigId = `plugin_config_${newRouteId}_${Date.now()}`
+            const newPluginConfigId = generateId('plugin_config')
             await pluginConfigApi.create(newPluginConfigId, {
               plugins: {}
             })
@@ -934,7 +930,7 @@ const handleCopy = async (row) => {
       } else {
         // 如果原路由没有 plugin_config_id，创建一个空的 Plugin Config
         try {
-          const newPluginConfigId = `plugin_config_${newRouteId}_${Date.now()}`
+          const newPluginConfigId = generateId('plugin_config')
           await pluginConfigApi.create(newPluginConfigId, {
             plugins: {}
           })

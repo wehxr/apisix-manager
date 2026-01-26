@@ -6,6 +6,7 @@ import SSL from '../views/SSL.vue'
 import Consumer from '../views/Consumer.vue'
 import Upstream from '../views/Upstream.vue'
 import Route from '../views/Route.vue'
+import GlobalRule from '../views/GlobalRule.vue'
 import { getConfig } from '../utils/api'
 
 const routes = [
@@ -19,7 +20,8 @@ const routes = [
       { path: 'ssl', component: SSL },
       { path: 'consumer', component: Consumer },
       { path: 'upstream', component: Upstream },
-      { path: 'route', component: Route }
+      { path: 'route', component: Route },
+      { path: 'global-rule', component: GlobalRule }
     ]
   }
 ]

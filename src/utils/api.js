@@ -91,4 +91,20 @@ export const pluginConfigApi = {
   delete: (id) => api.delete(`/apisix/admin/plugin_configs/${id}`)
 }
 
+// 全局规则管理
+export const globalRuleApi = {
+  list: (params = {}) => {
+    const queryParams = new URLSearchParams()
+    if (params.page) queryParams.append('page', params.page)
+    if (params.page_size) queryParams.append('page_size', params.page_size)
+    const queryString = queryParams.toString()
+    return api.get(`/apisix/admin/global_rules${queryString ? '?' + queryString : ''}`)
+  },
+  get: (id) => api.get(`/apisix/admin/global_rules/${id}`),
+  create: (id, data) => api.put(`/apisix/admin/global_rules/${id}`, data),
+  update: (id, data) => api.put(`/apisix/admin/global_rules/${id}`, data),
+  patch: (id, data) => api.patch(`/apisix/admin/global_rules/${id}`, data),
+  delete: (id) => api.delete(`/apisix/admin/global_rules/${id}`)
+}
+
 export default api
