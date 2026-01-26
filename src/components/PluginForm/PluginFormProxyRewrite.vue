@@ -287,8 +287,8 @@
 
 <script setup>
 import { ref, watch, computed, nextTick } from 'vue'
-import { isPluginEnabled, setPluginEnabled } from '../../utils/plugin'
-import { usePluginConfig } from '../../composables/usePluginConfig'
+import { isPluginEnabled, setPluginEnabled } from '@/utils/plugin'
+import { usePluginConfig } from '@/composables/usePluginConfig'
 
 const props = defineProps({
   modelValue: {

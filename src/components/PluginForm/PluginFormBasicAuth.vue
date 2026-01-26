@@ -130,9 +130,9 @@
 
 <script setup>
 import { ref, watch, onMounted, computed, nextTick } from 'vue'
-import { consumerApi, consumerGroupApi } from '../../utils/api'
-import { isPluginEnabled } from '../../utils/plugin'
-import { usePluginConfig } from '../../composables/usePluginConfig'
+import { consumerApi, consumerGroupApi } from '@/utils/api'
+import { isPluginEnabled } from '@/utils/plugin'
+import { usePluginConfig } from '@/composables/usePluginConfig'
 
 const props = defineProps({
   modelValue: {

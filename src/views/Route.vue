@@ -119,11 +119,11 @@
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item 
-                      v-for="(name, key) in PLUGIN_NAMES" 
-                      :key="key" 
-                      :command="key"
+                      v-for="pluginKey in availablePlugins" 
+                      :key="pluginKey" 
+                      :command="pluginKey"
                     >
-                      {{ name }}
+                      {{ PLUGIN_NAMES[pluginKey] }}
                     </el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
@@ -181,34 +181,27 @@
     </el-dialog>
 
     <!-- 插件配置对话框 -->
-    <el-dialog
+    <PluginDialog
       v-model="pluginDialogVisible"
-      :title="pluginDialogTitle"
-      :width="dialogWidth"
-      @close="resetPluginForm"
-    >
-      <component
-        v-if="currentPluginComponent"
-        :is="currentPluginComponent"
-        :model-value="currentPluginConfig"
-        @update:model-value="handlePluginConfigUpdate"
-      />
-      <template #footer>
-        <el-button @click="pluginDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSavePlugin">确定</el-button>
-      </template>
-    </el-dialog>
+      resource-type="route"
+      :resource-id="currentRouteId"
+      :plugin-type="currentPluginType"
+      :initial-config="{ plugin_config_id: currentPluginConfigId }"
+      @saved="handlePluginSaved"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, ArrowDown } from '@element-plus/icons-vue'
-import { routeApi, upstreamApi, pluginConfigApi } from '../utils/api'
-import { formatTimestamp, getDialogWidth } from '../utils/format'
-import { isPluginEnabled, getPluginName, PLUGIN_NAMES } from '../utils/plugin'
-import { generateId } from '../utils/id'
+import { routeApi, upstreamApi, pluginConfigApi } from '@/utils/api'
+import { formatTimestamp, getDialogWidth } from '@/utils/format'
+import { isPluginEnabled, getPluginName, PLUGIN_NAMES, RESOURCE_TYPES, getPluginsByResourceType } from '@/utils/plugin'
+import { generateId } from '@/utils/id'
+import RouteForm from '@/components/RouteForm.vue'
+import PluginDialog from '@/components/PluginDialog.vue'
 
 // 响应式分页布局
 const paginationLayout = computed(() => {
@@ -224,22 +217,6 @@ const paginationLayout = computed(() => {
     return 'total, sizes, prev, pager, next, jumper'
   }
 })
-import RouteForm from '../components/RouteForm/RouteForm.vue'
-import RouteFormBasicAuth from '../components/RouteForm/RouteFormBasicAuth.vue'
-import RouteFormIpRestriction from '../components/RouteForm/RouteFormIpRestriction.vue'
-import RouteFormCors from '../components/RouteForm/RouteFormCors.vue'
-import RouteFormRealIp from '../components/RouteForm/RouteFormRealIp.vue'
-import RouteFormRedirect from '../components/RouteForm/RouteFormRedirect.vue'
-import RouteFormLimitReq from '../components/RouteForm/RouteFormLimitReq.vue'
-import RouteFormLimitCount from '../components/RouteForm/RouteFormLimitCount.vue'
-import RouteFormLimitConn from '../components/RouteForm/RouteFormLimitConn.vue'
-import RouteFormProxyCache from '../components/RouteForm/RouteFormProxyCache.vue'
-import RouteFormClientControl from '../components/RouteForm/RouteFormClientControl.vue'
-import RouteFormUriBlocker from '../components/RouteForm/RouteFormUriBlocker.vue'
-import RouteFormApiBreaker from '../components/RouteForm/RouteFormApiBreaker.vue'
-import RouteFormGzip from '../components/RouteForm/RouteFormGzip.vue'
-import RouteFormRequestId from '../components/RouteForm/RouteFormRequestId.vue'
-import RouteFormProxyRewrite from '../components/RouteForm/RouteFormProxyRewrite.vue'
 
 const loading = ref(false)
 const routeList = ref([])
@@ -248,11 +225,9 @@ const dialogVisible = ref(false)
 const dialogTitle = ref('创建路由')
 const formRef = ref(null)
 const pluginDialogVisible = ref(false)
-const pluginDialogTitle = ref('配置插件')
 const currentRouteId = ref('')
 const currentPluginType = ref('')
-const currentPluginConfig = ref({})
-const currentPluginComponent = ref(null)
+const currentPluginConfigId = ref(null)
 
 // 分页配置
 const pagination = ref({
@@ -285,6 +260,11 @@ const getUpstreamName = (upstreamId) => {
   const upstream = upstreamList.value.find(item => item.id === upstreamId)
   return upstream?.name || ''
 }
+
+// 获取可用于 route 类型的插件列表
+const availablePlugins = computed(() => {
+  return getPluginsByResourceType(RESOURCE_TYPES.ROUTE)
+})
 
 
 
@@ -321,180 +301,27 @@ const dialogWidth = computed(() => getDialogWidth())
 
 // 配置单个插件
 const handleConfigPlugin = async (row, pluginType) => {
-  // 先设置基本状态，确保对话框能打开
+  // 先关闭对话框（如果已打开），确保状态重置
+  if (pluginDialogVisible.value) {
+    pluginDialogVisible.value = false
+    await nextTick()
+  }
+  
+  // 设置所有必要的值
   currentRouteId.value = row.id
+  currentPluginConfigId.value = row.plugin_config_id || null
   currentPluginType.value = pluginType
   
-  // 组件映射
-  const pluginComponents = {
-    'request-id': RouteFormRequestId,
-    'basic-auth': RouteFormBasicAuth,
-    'ip-restriction': RouteFormIpRestriction,
-    'cors': RouteFormCors,
-    'real-ip': RouteFormRealIp,
-    'redirect': RouteFormRedirect,
-    'limit-req': RouteFormLimitReq,
-    'limit-count': RouteFormLimitCount,
-    'limit-conn': RouteFormLimitConn,
-    'proxy-cache': RouteFormProxyCache,
-    'client-control': RouteFormClientControl,
-    'uri-blocker': RouteFormUriBlocker,
-    'api-breaker': RouteFormApiBreaker,
-    'gzip': RouteFormGzip,
-    'proxy-rewrite': RouteFormProxyRewrite
-  }
+  // 等待一个 tick 确保响应式更新完成
+  await nextTick()
   
-  // 验证 pluginType 是否有效
-  if (!pluginComponents[pluginType]) {
-    ElMessage.warning(`未知的插件类型: ${pluginType}`)
-    return
-  }
-  
-  pluginDialogTitle.value = PLUGIN_NAMES[pluginType] || '配置插件'
-  currentPluginComponent.value = pluginComponents[pluginType]
-  
-  // 直接从 row 对象获取 plugin_config_id（loadData 中已经加载了）
-  let pluginConfigId = row.plugin_config_id || null
-  
-  // 先设置配置，确保对话框能立即打开
-  currentPluginConfig.value = {
-    plugin_config_id: pluginConfigId
-  }
-  
-  // 如果没有 plugin_config_id，创建一个空的 Plugin Config
-  if (!pluginConfigId) {
-    try {
-      pluginConfigId = generateId('plugin_config')
-      await pluginConfigApi.create(pluginConfigId, {
-        plugins: {}
-      })
-      
-      // 更新路由，关联 plugin_config_id（只需要更新 plugin_config_id 字段）
-      await routeApi.update(row.id, {
-        plugin_config_id: pluginConfigId
-      })
-      
-      // 更新 row 对象中的 plugin_config_id，避免下次还需要创建
-      row.plugin_config_id = pluginConfigId
-      
-      // 更新配置
-      currentPluginConfig.value = {
-        plugin_config_id: pluginConfigId
-      }
-    } catch (error) {
-      // 如果创建失败，仍然继续，但会传递 null
-      console.warn('创建 Plugin Config 失败:', error)
-      // 即使创建失败，也继续打开对话框
-      currentPluginConfig.value = {
-        plugin_config_id: null
-      }
-    }
-  }
-  
-  // 确保对话框总是打开
+  // 打开对话框
   pluginDialogVisible.value = true
 }
 
-// 处理插件配置更新
-const handlePluginConfigUpdate = (value) => {
-  // 子组件会返回更新后的 plugins
-  currentPluginConfig.value = {
-    plugin_config_id: currentPluginConfig.value.plugin_config_id,
-    plugins: value.plugins || {}
-  }
-}
-
-// 统一的保存逻辑（使用 plugin_config_id）
-const handleSavePlugin = async () => {
-  try {
-    // 获取当前路由信息
-    const routeRes = await routeApi.get(currentRouteId.value)
-    const routeData = routeRes.data?.value || routeRes.data || {}
-    
-    // 获取更新后的插件配置（子组件已经处理好了）
-    const updatedPlugins = currentPluginConfig.value.plugins || {}
-    
-    // 特殊处理：proxy-cache 插件，清理空数组字段
-    if (updatedPlugins['proxy-cache']) {
-      const proxyCache = updatedPlugins['proxy-cache']
-      if (Array.isArray(proxyCache.cache_bypass) && proxyCache.cache_bypass.length === 0) {
-        delete proxyCache.cache_bypass
-      }
-      if (Array.isArray(proxyCache.no_cache) && proxyCache.no_cache.length === 0) {
-        delete proxyCache.no_cache
-      }
-    }
-    
-    // 特殊处理：basic-auth 可能关联 consumer-restriction
-    if (currentPluginType.value === 'basic-auth' && !updatedPlugins['consumer-restriction']) {
-      delete updatedPlugins['consumer-restriction']
-    }
-    
-    // 清理空插件配置
-    const cleanedPlugins = {}
-    Object.keys(updatedPlugins).forEach(pluginName => {
-      const pluginConfig = updatedPlugins[pluginName]
-      if (pluginConfig) {
-        const keys = Object.keys(pluginConfig)
-        // 特殊处理：basic-auth 即使为空对象也要保留
-        if (pluginName === 'basic-auth') {
-          cleanedPlugins[pluginName] = {}
-          return
-        }
-        // 过滤掉只有 _meta.disable 的配置
-        if (keys.length === 1 && keys[0] === '_meta' && pluginConfig._meta?.disable === true) {
-          return
-        }
-        // 过滤掉空对象（除了 basic-auth）
-        if (keys.length === 0) {
-          return
-        }
-        cleanedPlugins[pluginName] = { ...pluginConfig }
-      }
-    })
-    
-    // 获取或创建 Plugin Config ID
-    let pluginConfigId = currentPluginConfig.value.plugin_config_id || routeData.plugin_config_id
-    
-    if (!pluginConfigId) {
-      pluginConfigId = generateId('plugin_config')
-    }
-    
-    // 更新或创建 Plugin Config
-    const pluginConfigData = { plugins: cleanedPlugins }
-    
-    try {
-      await pluginConfigApi.get(pluginConfigId)
-      await pluginConfigApi.update(pluginConfigId, pluginConfigData)
-    } catch (error) {
-      await pluginConfigApi.create(pluginConfigId, pluginConfigData)
-    }
-    
-    // 更新路由的 plugin_config_id
-    const allowedFields = ['id', 'name', 'uris', 'hosts', 'methods', 'priority', 'status', 
-                           'enable_websocket', 'timeout', 'upstream_id', 'desc', 'vars', 'labels']
-    const cleanRouteData = {}
-    allowedFields.forEach(key => {
-      if (routeData[key] !== undefined) {
-        cleanRouteData[key] = routeData[key]
-      }
-    })
-    cleanRouteData.plugin_config_id = pluginConfigId
-
-    await routeApi.update(currentRouteId.value, cleanRouteData)
-    ElMessage.success('插件配置更新成功')
-    pluginDialogVisible.value = false
-    loadData()
-  } catch (error) {
-    // 错误消息已由拦截器自动显示
-  }
-}
-
-// 重置插件表单
-const resetPluginForm = () => {
-  currentPluginType.value = ''
-  currentPluginConfig.value = {}
-  currentPluginComponent.value = null
+// 处理插件保存成功
+const handlePluginSaved = () => {
+  loadData()
 }
 
 // 加载上游服务列表

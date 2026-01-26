@@ -1,22 +1,40 @@
 // 插件相关的工具函数
 
-// 插件名称翻译映射
-export const PLUGIN_NAMES = {
-  'request-id': '生成请求ID',
-  'basic-auth': '基本认证',
-  'ip-restriction': 'IP 限制',
-  'cors': '跨域策略',
-  'real-ip': '真实IP透传',
-  'proxy-rewrite': '代理重写',
-  'redirect': '重定向',
-  'gzip': 'Gzip压缩', 
-  'proxy-cache': '代理缓存',
-  'client-control': '限制请求体大小',
-  'uri-blocker': 'URI拦截',
-  'api-breaker': 'API熔断',
-  'limit-req': '请求速率限流',
-  'limit-count': '请求数限流',
-  'limit-conn': '并发连接数限制',
+// 导入插件资源配置
+import pluginResourcesConfig from '../config/plugin-resources.json'
+
+// 资源类型定义（从 JSON 配置生成）
+export const RESOURCE_TYPES = {
+  ROUTE: 'route',
+  GLOBAL_RULE: 'global_rule',
+  CONSUMER: 'consumer',
+  UPSTREAM: 'upstream',
+  CONSUMER_GROUP: 'consumer_group'
+}
+
+// 插件名称翻译映射（从 JSON 配置生成）
+export const PLUGIN_NAMES = Object.keys(pluginResourcesConfig.plugins).reduce((acc, key) => {
+  acc[key] = pluginResourcesConfig.plugins[key].name
+  return acc
+}, {})
+
+// 插件与资源的关联定义（从 JSON 配置生成）
+export const PLUGIN_RESOURCE_MAP = Object.keys(pluginResourcesConfig.plugins).reduce((acc, key) => {
+  acc[key] = pluginResourcesConfig.plugins[key].resources || []
+  return acc
+}, {})
+
+// 获取指定资源类型可用的插件列表
+export function getPluginsByResourceType(resourceType) {
+  return Object.keys(PLUGIN_RESOURCE_MAP).filter(pluginKey => 
+    PLUGIN_RESOURCE_MAP[pluginKey].includes(resourceType)
+  )
+}
+
+// 检查插件是否可用于指定资源类型
+export function isPluginAvailableForResource(pluginKey, resourceType) {
+  const availablePlugins = PLUGIN_RESOURCE_MAP[pluginKey]
+  return availablePlugins ? availablePlugins.includes(resourceType) : false
 }
 
 // 获取插件的中文名称

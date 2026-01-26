@@ -8,8 +8,8 @@
     >
       <template #default>
         <div style="font-size: 13px; line-height: 1.6;">
-          此插件通过并发连接数来限制请求速率。超过阈值的请求将根据配置被延迟或拒绝，从而确保可控的资源使用并防止过载。
-          适用于需要控制并发连接数的场景，可以防止过多并发连接对服务器造成压力。
+          此插件使用固定窗口算法，通过给定时间间隔内的请求数量来限制请求速率。超过配置配额的请求将被拒绝。
+          适用于需要精确控制请求数量的场景，可以防止短时间内大量请求对服务器造成冲击。
         </div>
       </template>
     </el-alert>
@@ -18,129 +18,89 @@
       <el-switch :model-value="localEnabled" @update:model-value="handleEnableChange" />
     </el-form-item>
     <template v-if="localEnabled">
-      <el-form-item label="最大并发连接数（conn）" required>
+      <el-form-item label="请求数量（count）" required>
         <el-input-number
-          :model-value="conn"
-          @update:model-value="handleConnChange"
+          :model-value="count"
+          @update:model-value="handleCountChange"
           :min="1"
           :max="100000"
           style="width: 100%"
         />
-        <div class="form-tip">
-          <p><strong>说明：</strong>允许的最大并发连接数（单位：个）。超过配置的限制且低于 conn + burst 的请求将被延迟。</p>
-          <p><strong>单位：</strong>个（数量单位），表示同时存在的连接数量，不是每秒的连接数。</p>
-          <p><strong>工作原理：</strong></p>
-          <ul>
-            <li>当并发连接数 ≤ conn 时：请求立即处理，无延迟</li>
-            <li>当并发连接数 > conn 但 ≤ (conn + burst) 时：超出 conn 的请求会被延迟处理</li>
-            <li>当并发连接数 > (conn + burst) 时：超出突发容量的请求会被直接拒绝</li>
-          </ul>
-          <p><strong>示例：</strong>conn=5 表示最多允许同时存在 5 个并发连接，超过的请求会被延迟或拒绝。</p>
-        </div>
+        <div class="form-tip">给定时间间隔内允许的最大请求数</div>
       </el-form-item>
-      <el-form-item label="突发容量（burst）" required>
+      <el-form-item label="时间窗口（time_window）（秒）" required>
         <el-input-number
-          :model-value="burst"
-          @update:model-value="handleBurstChange"
-          :min="0"
-          :max="10000"
+          :model-value="timeWindow"
+          @update:model-value="handleTimeWindowChange"
+          :min="1"
+          :max="86400"
           style="width: 100%"
         />
-        <div class="form-tip">
-          <p><strong>说明：</strong>允许延迟的过多并发连接数（单位：个）。超过限制的请求将被立即拒绝。</p>
-          <p><strong>单位：</strong>个（数量单位），表示在 conn 基础上额外允许的并发连接数量。</p>
-          <p><strong>工作原理：</strong></p>
-          <ul>
-            <li>当并发连接数 ≤ conn 时：请求正常处理，无延迟</li>
-            <li>当并发连接数 > conn 但 ≤ (conn + burst) 时：超出 conn 的请求会被延迟处理</li>
-            <li>当并发连接数 > (conn + burst) 时：超出突发容量的请求会被直接拒绝，返回拒绝状态码</li>
-          </ul>
-          <p><strong>示例：</strong>conn=5, burst=3 时：</p>
-          <ul>
-            <li>最多可处理 8 个并发连接（5 + 3）</li>
-            <li>前 5 个连接立即处理（基础连接数）</li>
-            <li>接下来的 3 个连接会被延迟处理（突发容量）</li>
-            <li>超过 8 个的连接会被直接拒绝</li>
-          </ul>
-        </div>
-      </el-form-item>
-      <el-form-item label="默认连接延迟（default_conn_delay）（秒）" required>
-        <el-input-number
-          :model-value="defaultConnDelay"
-          @update:model-value="handleDefaultConnDelayChange"
-          :min="0.01"
-          :max="3600"
-          :step="0.1"
-          style="width: 100%"
-        />
-        <div class="form-tip">
-          <p><strong>说明：</strong>允许超过 conn + burst 的并发请求的处理延迟（秒），可根据 only_use_default_delay 设置动态调整。</p>
-          <p><strong>工作原理：</strong></p>
-          <ul>
-            <li>当 only_use_default_delay 为 false 时：根据请求超出 conn 限制的程度按比例延迟请求。拥塞越严重，延迟就越大。</li>
-            <li>当 only_use_default_delay 为 true 时：使用 default_conn_delay 延迟 burst 范围内的所有超额请求。</li>
-          </ul>
-          <p><strong>示例：</strong>conn=5, burst=3, default_conn_delay=1 时：</p>
-          <ul>
-            <li>如果 only_use_default_delay=false：6 个并发请求延迟 1 秒，7 个请求延迟 2 秒，8 个请求延迟 3 秒</li>
-            <li>如果 only_use_default_delay=true：6、7 或 8 个并发请求都延迟 1 秒</li>
-          </ul>
-        </div>
-      </el-form-item>
-      <el-form-item label="仅使用默认延迟（only_use_default_delay）">
-        <el-switch
-          :model-value="onlyUseDefaultDelay"
-          @update:model-value="handleOnlyUseDefaultDelayChange"
-        />
-        <div class="form-tip">
-          <p><strong>说明：</strong>控制延迟计算方式。</p>
-          <p><strong>关闭（false）：</strong></p>
-          <ul>
-            <li>根据请求超出 conn 限制的程度按比例延迟请求</li>
-            <li>拥塞越严重，延迟就越大</li>
-            <li>例如：conn=5, burst=3, default_conn_delay=1 时，6 个并发请求延迟 1 秒，7 个请求延迟 2 秒，8 个请求延迟 3 秒</li>
-          </ul>
-          <p><strong>开启（true）：</strong></p>
-          <ul>
-            <li>使用 default_conn_delay 延迟 burst 范围内的所有超额请求</li>
-            <li>所有超额请求使用相同的延迟时间</li>
-            <li>例如：conn=5, burst=3, default_conn_delay=1 时，6、7 或 8 个并发请求都延迟 1 秒</li>
-          </ul>
-        </div>
+        <div class="form-tip">速率限制 count 对应的时间间隔（以秒为单位）</div>
       </el-form-item>
       
       <el-divider>限制键配置</el-divider>
+      <el-form-item label="键类型（key_type）">
+        <el-radio-group :model-value="keyType" @update:model-value="handleKeyTypeChange">
+          <el-radio label="var_combination">变量组合 (var_combination)</el-radio>
+          <el-radio label="constant">常量 (constant)</el-radio>
+        </el-radio-group>
+      </el-form-item>
+      <el-form-item label="键类型说明" class="key-type-desc-item">
+        <div class="key-type-description">
+          <div class="description-item">
+            <div class="description-title">
+              <el-icon><Connection /></el-icon>
+              <strong>var_combination（变量组合）</strong>
+            </div>
+            <div class="description-content">
+              <p><strong>用途：</strong>按多个变量组合进行限流，适用于需要同时考虑多个维度的场景。</p>
+              <p><strong>配置方式：</strong>在「限制键（key）」中填写多个变量，用空格分隔，所有变量都需要以 <code>$</code> 开头。</p>
+              <p><strong>示例：</strong></p>
+              <ul>
+                <li><code>$remote_addr $consumer_name</code> - 按「IP地址 + 消费者名称」组合限流，同一IP的同一消费者共享配额</li>
+                <li><code>$http_x_api_key $remote_addr</code> - 按「API密钥 + IP地址」组合限流</li>
+                <li><code>$remote_addr $http_user_agent</code> - 按「IP地址 + 用户代理」组合限流</li>
+              </ul>
+              <p><strong>工作原理：</strong>只有当所有变量的值都完全相同时，才会共享同一个计数器。例如，IP为 192.168.1.1 且消费者为 john 的请求，与 IP为 192.168.1.1 且消费者为 jane 的请求，会使用不同的计数器。</p>
+            </div>
+          </div>
+          <div class="description-item">
+            <div class="description-title">
+              <el-icon><Lock /></el-icon>
+              <strong>constant（常量）</strong>
+            </div>
+            <div class="description-content">
+              <p><strong>用途：</strong>实现全局限流，所有请求共享同一个计数器，无论请求来源如何。</p>
+              <p><strong>配置方式：</strong>在「限制键（key）」中任意填写一个固定的字符串作为计数器的标识名称。这个字符串不会从请求中提取，只是给计数器起个名字。</p>
+              <p><strong>示例：</strong></p>
+              <ul>
+                <li><code>global_limit</code> - 全局限流</li>
+                <li><code>api_limit</code> - API总限流</li>
+                <li><code>my_service_limit</code> - 服务总限流</li>
+              </ul>
+              <p><strong>工作原理：</strong>所有请求都使用这个相同的 key，因此它们共享同一个计数器。例如，如果配置 count=1000，那么所有请求加起来在时间窗口内最多只能有 1000 次请求，无论这些请求来自哪个IP、哪个消费者。</p>
+              <p><strong>适用场景：</strong>保护整个API服务，防止总请求量过大对后端造成压力。常用于：</p>
+              <ul>
+                <li>保护后端服务总容量</li>
+                <li>实现API级别的全局配额</li>
+                <li>防止分布式攻击（所有来源共享配额）</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </el-form-item>
       <el-form-item label="限制键（key）">
         <el-input
           :model-value="key"
           @update:model-value="handleKeyChange"
-          placeholder="如: $remote_addr $consumer_name"
+          :placeholder="getKeyPlaceholder()"
         />
-        <div class="key-description">
-          <div class="description-content">
-            <p><strong>说明：</strong>limit-conn 插件使用变量组合（var_combination）方式，按多个变量组合进行限流。</p>
-            <p><strong>配置方式：</strong>填写一个或多个变量，用空格分隔，所有变量都需要以 <code>$</code> 开头。</p>
-            <p><strong>常用变量：</strong></p>
-            <ul>
-              <li><code>$remote_addr</code> - 客户端 IP 地址</li>
-              <li><code>$consumer_name</code> - 消费者名称</li>
-              <li><code>$http_x_api_key</code> - 请求头中的 API 密钥（如 X-API-Key）</li>
-              <li><code>$arg_api_key</code> - URL 参数中的 API 密钥（如 ?api_key=xxx）</li>
-              <li><code>$http_user_agent</code> - 用户代理（User-Agent）</li>
-            </ul>
-            <p><strong>示例：</strong></p>
-            <ul>
-              <li><code>$remote_addr</code> - 按 IP 地址限流，每个 IP 独立计数</li>
-              <li><code>$remote_addr $consumer_name</code> - 按「IP地址 + 消费者名称」组合限流，同一IP的同一消费者共享配额</li>
-              <li><code>$http_x_api_key $remote_addr</code> - 按「API密钥 + IP地址」组合限流</li>
-            </ul>
-            <p><strong>工作原理：</strong>只有当所有变量的值都完全相同时，才会共享同一个计数器。例如，IP为 192.168.1.1 且消费者为 john 的请求，与 IP为 192.168.1.1 且消费者为 jane 的请求，会使用不同的计数器。</p>
-          </div>
-        </div>
+        <div class="form-tip">{{ getKeyTip() }}</div>
       </el-form-item>
 
       <el-divider>基本配置</el-divider>
-      <el-form-item label="拒绝状态码（rejection_code）">
+      <el-form-item label="拒绝状态码（rejected_code）">
         <el-input-number
           :model-value="rejectionCode"
           @update:model-value="handleRejectionCodeChange"
@@ -150,7 +110,7 @@
         />
         <div class="form-tip">
           <p><strong>说明：</strong>当请求超过配置的配额限制时，APISIX 会拒绝该请求并返回此 HTTP 状态码。</p>
-          <p><strong>默认值：</strong>429 Unavailable）</p>
+          <p><strong>默认值：</strong>429 Too Many Requests</p>
           <p><strong>常用值：</strong></p>
           <ul>
             <li><strong>429</strong> - Too Many Requests（推荐，语义更明确，表示请求过多）</li>
@@ -159,7 +119,7 @@
           </ul>
         </div>
       </el-form-item>
-      <el-form-item label="拒绝消息（rejection_msg）">
+      <el-form-item label="拒绝消息（rejected_msg）">
         <el-input
           :model-value="rejectionMsg"
           @update:model-value="handleRejectionMsgChange"
@@ -179,6 +139,15 @@
           <p><strong>注意：</strong>如果不填写，APISIX 会返回默认的错误信息。</p>
         </div>
       </el-form-item>
+      <el-form-item label="显示限制配额头（show_limit_quota_header）">
+        <el-switch
+          :model-value="showLimitQuotaHeader"
+          @update:model-value="handleShowLimitQuotaHeaderChange"
+        />
+        <div class="form-tip">
+          如果为 true，则在响应标头中包含 X-RateLimit-Limit（总配额）、X-RateLimit-Remaining（剩余配额）和 X-RateLimit-Reset（计数器重置的剩余秒数）
+        </div>
+      </el-form-item>
       <el-form-item label="允许降级（allow_degradation）">
         <el-switch
           :model-value="allowDegradation"
@@ -188,6 +157,14 @@
           当插件或其依赖项（如 Redis）出现故障时的降级策略。开启（true）：插件不可用时，请求会绕过限流直接转发到后端，保证服务可用性，但失去限流保护；
           关闭（false）：插件不可用时直接拒绝请求，保证限流策略的严格性，但可能影响服务可用性。建议生产环境开启以保证高可用。
         </div>
+      </el-form-item>
+      <el-form-item label="分组（group）">
+        <el-input
+          :model-value="group"
+          @update:model-value="handleGroupChange"
+          placeholder="插件的 group ID"
+        />
+        <div class="form-tip">插件的 group ID，以便同一 group 的路由可以共享相同的速率限制计数器</div>
       </el-form-item>
 
       <el-divider>存储策略</el-divider>
@@ -338,8 +315,9 @@
 
 <script setup>
 import { ref, watch, computed } from 'vue'
-import { isPluginEnabled, setPluginEnabled } from '../../utils/plugin'
-import { usePluginConfig } from '../../composables/usePluginConfig'
+import { Connection, Lock } from '@element-plus/icons-vue'
+import { isPluginEnabled, setPluginEnabled } from '@/utils/plugin'
+import { usePluginConfig } from '@/composables/usePluginConfig'
 
 const props = defineProps({
   modelValue: {
@@ -355,110 +333,126 @@ const emit = defineEmits(['update:modelValue'])
 // 使用 composable 加载和管理 Plugin Config
 const { plugins, updatePlugins } = usePluginConfig(props, emit)
 
-// 从 plugins 中提取 limit-conn 配置
-const limitConnPlugin = computed(() => plugins.value['limit-conn'] || {})
+// 从 plugins 中提取 limit-count 配置
+const limitCountPlugin = computed(() => plugins.value['limit-count'] || {})
 
 // 计算 enabled 状态
-const enabled = computed(() => isPluginEnabled(limitConnPlugin.value))
+const enabled = computed(() => isPluginEnabled(limitCountPlugin.value))
 
 // 计算各个字段
-const conn = computed(() => {
-  return limitConnPlugin.value.conn !== undefined ? limitConnPlugin.value.conn : 1
+const count = computed(() => {
+  return limitCountPlugin.value.count !== undefined ? limitCountPlugin.value.count : 1
 })
 
-const burst = computed(() => {
-  return limitConnPlugin.value.burst !== undefined ? limitConnPlugin.value.burst : 0
+const timeWindow = computed(() => {
+  return limitCountPlugin.value.time_window !== undefined ? limitCountPlugin.value.time_window : 60
 })
 
-const defaultConnDelay = computed(() => {
-  return limitConnPlugin.value.default_conn_delay !== undefined ? limitConnPlugin.value.default_conn_delay : 1
+const keyType = computed(() => {
+  const t = limitCountPlugin.value.key_type
+  return t === 'var_combination' || t === 'constant' ? t : 'var_combination'
 })
-
-const onlyUseDefaultDelay = computed(() => {
-  return limitConnPlugin.value.only_use_default_delay !== undefined ? limitConnPlugin.value.only_use_default_delay : false
-})
-
-// key_type 固定为 'var_combination'，不在表单上显示
-const keyType = computed(() => 'var_combination')
 
 const key = computed(() => {
-  return limitConnPlugin.value.key !== undefined ? limitConnPlugin.value.key : '$remote_addr'
+  return limitCountPlugin.value.key !== undefined ? limitCountPlugin.value.key : '$remote_addr'
 })
 
 const rejectionCode = computed(() => {
   // 兼容旧配置中的 rejection_code，但优先使用 rejected_code
-  return limitConnPlugin.value.rejection_code !== undefined 
-    ? limitConnPlugin.value.rejection_code 
-    : (limitConnPlugin.value.rejected_code !== undefined ? limitConnPlugin.value.rejected_code : 429)
+  return limitCountPlugin.value.rejected_code !== undefined 
+    ? limitCountPlugin.value.rejected_code 
+    : (limitCountPlugin.value.rejection_code !== undefined ? limitCountPlugin.value.rejection_code : 429)
 })
 
 const rejectionMsg = computed(() => {
   // 兼容旧配置中的 rejection_msg，但优先使用 rejected_msg
-  return limitConnPlugin.value.rejection_msg !== undefined 
-    ? limitConnPlugin.value.rejection_msg 
-    : (limitConnPlugin.value.rejection_msg !== undefined ? limitConnPlugin.value.rejection_msg : '请求过于频繁，请稍后再试')
+  return limitCountPlugin.value.rejected_msg !== undefined 
+    ? limitCountPlugin.value.rejected_msg 
+    : (limitCountPlugin.value.rejection_msg !== undefined ? limitCountPlugin.value.rejection_msg : '请求过于频繁，请稍后再试')
+})
+
+const showLimitQuotaHeader = computed(() => {
+  return limitCountPlugin.value.show_limit_quota_header !== undefined ? limitCountPlugin.value.show_limit_quota_header : true
 })
 
 const allowDegradation = computed(() => {
-  return limitConnPlugin.value.allow_degradation !== undefined ? limitConnPlugin.value.allow_degradation : false
+  return limitCountPlugin.value.allow_degradation !== undefined ? limitCountPlugin.value.allow_degradation : false
+})
+
+const group = computed(() => {
+  return limitCountPlugin.value.group || ''
 })
 
 const policy = computed(() => {
-  return limitConnPlugin.value.policy || 'local'
+  return limitCountPlugin.value.policy || 'local'
 })
 
 const redisHost = computed(() => {
-  return limitConnPlugin.value.redis_host || ''
+  return limitCountPlugin.value.redis_host || ''
 })
 
 const redisPort = computed(() => {
-  return limitConnPlugin.value.redis_port !== undefined ? limitConnPlugin.value.redis_port : 6379
+  return limitCountPlugin.value.redis_port !== undefined ? limitCountPlugin.value.redis_port : 6379
 })
 
 const redisUsername = computed(() => {
-  return limitConnPlugin.value.redis_username || ''
+  return limitCountPlugin.value.redis_username || ''
 })
 
 const redisPassword = computed(() => {
-  return limitConnPlugin.value.redis_password || ''
+  return limitCountPlugin.value.redis_password || ''
 })
 
 const redisSsl = computed(() => {
-  return limitConnPlugin.value.redis_ssl !== undefined ? limitConnPlugin.value.redis_ssl : false
+  return limitCountPlugin.value.redis_ssl !== undefined ? limitCountPlugin.value.redis_ssl : false
 })
 
 const redisSslVerify = computed(() => {
-  return limitConnPlugin.value.redis_ssl_verify !== undefined ? limitConnPlugin.value.redis_ssl_verify : false
+  return limitCountPlugin.value.redis_ssl_verify !== undefined ? limitCountPlugin.value.redis_ssl_verify : false
 })
 
 const redisDatabase = computed(() => {
-  return limitConnPlugin.value.redis_database !== undefined ? limitConnPlugin.value.redis_database : 0
+  return limitCountPlugin.value.redis_database !== undefined ? limitCountPlugin.value.redis_database : 0
 })
 
 const redisTimeout = computed(() => {
-  return limitConnPlugin.value.redis_timeout !== undefined ? limitConnPlugin.value.redis_timeout : 1000
+  return limitCountPlugin.value.redis_timeout !== undefined ? limitCountPlugin.value.redis_timeout : 1000
 })
 
 const redisClusterNodes = computed(() => {
-  return Array.isArray(limitConnPlugin.value.redis_cluster_nodes) 
-    ? limitConnPlugin.value.redis_cluster_nodes 
+  return Array.isArray(limitCountPlugin.value.redis_cluster_nodes) 
+    ? limitCountPlugin.value.redis_cluster_nodes 
     : []
 })
 
 const redisClusterName = computed(() => {
-  return limitConnPlugin.value.redis_cluster_name || ''
+  return limitCountPlugin.value.redis_cluster_name || ''
 })
 
 const redisClusterSsl = computed(() => {
-  return limitConnPlugin.value.redis_cluster_ssl !== undefined ? limitConnPlugin.value.redis_cluster_ssl : false
+  return limitCountPlugin.value.redis_cluster_ssl !== undefined ? limitCountPlugin.value.redis_cluster_ssl : false
 })
 
 const redisClusterSslVerify = computed(() => {
-  return limitConnPlugin.value.redis_cluster_ssl_verify !== undefined ? limitConnPlugin.value.redis_cluster_ssl_verify : false
+  return limitCountPlugin.value.redis_cluster_ssl_verify !== undefined ? limitCountPlugin.value.redis_cluster_ssl_verify : false
 })
 
 // 内部状态
 const localEnabled = ref(enabled.value)
+
+// 获取 key 的占位符
+const getKeyPlaceholder = () => {
+  return keyType.value === 'var_combination'
+    ? '如: $remote_addr $consumer_name'
+    : '任意填一个字符串即可，如: global_limit、api_limit、my_service'
+}
+
+// 获取 key 的提示信息
+const getKeyTip = () => {
+  return keyType.value === 'var_combination'
+    ? '多个变量组合，用空格分隔，所有变量都需要 $ 前缀。例：$remote_addr $consumer_name（按IP+消费者组合限流）'
+    : '常量模式下，key 不取自请求，是你自己起的「计数器名字」。填任意字符串即可，如 global_limit、api_limit。所有请求共用该 key，共享同一计数器（全局限流）。'
+}
 
 // 监听 props 变化，更新内部状态
 watch(enabled, (newEnabled) => {
@@ -470,48 +464,51 @@ watch(localEnabled, (newEnabled) => {
   const currentPlugins = { ...plugins.value }
   
   if (newEnabled) {
-    currentPlugins['limit-conn'] = {
-      conn: conn.value > 0 ? conn.value : 1,
-      burst: burst.value,
-      default_conn_delay: defaultConnDelay.value > 0 ? defaultConnDelay.value : 1,
-      only_use_default_delay: onlyUseDefaultDelay.value,
-      key_type: 'var_combination', // 固定为 var_combination
+    currentPlugins['limit-count'] = {
+      count: count.value > 0 ? count.value : 1,
+      time_window: timeWindow.value > 0 ? timeWindow.value : 60,
+      key_type: keyType.value,
       key: key.value,
-      rejection_code: rejectionCode.value,
+      rejected_code: rejectionCode.value,
+      show_limit_quota_header: showLimitQuotaHeader.value,
       allow_degradation: allowDegradation.value,
       policy: policy.value
     }
     
     if (rejectionMsg.value) {
-      currentPlugins['limit-conn'].rejection_msg = rejectionMsg.value
+      currentPlugins['limit-count'].rejected_msg = rejectionMsg.value
+    }
+    
+    if (group.value) {
+      currentPlugins['limit-count'].group = group.value
     }
     
     // Redis 配置
     if (policy.value === 'redis') {
-      if (redisHost.value) currentPlugins['limit-conn'].redis_host = redisHost.value
-      if (redisPort.value) currentPlugins['limit-conn'].redis_port = redisPort.value
-      if (redisUsername.value) currentPlugins['limit-conn'].redis_username = redisUsername.value
-      if (redisPassword.value) currentPlugins['limit-conn'].redis_password = redisPassword.value
-      if (redisSsl.value !== undefined) currentPlugins['limit-conn'].redis_ssl = redisSsl.value
-      if (redisSslVerify.value !== undefined) currentPlugins['limit-conn'].redis_ssl_verify = redisSslVerify.value
-      if (redisDatabase.value !== undefined) currentPlugins['limit-conn'].redis_database = redisDatabase.value
-      if (redisTimeout.value !== undefined) currentPlugins['limit-conn'].redis_timeout = redisTimeout.value
+      if (redisHost.value) currentPlugins['limit-count'].redis_host = redisHost.value
+      if (redisPort.value) currentPlugins['limit-count'].redis_port = redisPort.value
+      if (redisUsername.value) currentPlugins['limit-count'].redis_username = redisUsername.value
+      if (redisPassword.value) currentPlugins['limit-count'].redis_password = redisPassword.value
+      if (redisSsl.value !== undefined) currentPlugins['limit-count'].redis_ssl = redisSsl.value
+      if (redisSslVerify.value !== undefined) currentPlugins['limit-count'].redis_ssl_verify = redisSslVerify.value
+      if (redisDatabase.value !== undefined) currentPlugins['limit-count'].redis_database = redisDatabase.value
+      if (redisTimeout.value !== undefined) currentPlugins['limit-count'].redis_timeout = redisTimeout.value
     }
     
     // Redis Cluster 配置
     if (policy.value === 'redis-cluster') {
-      if (redisClusterNodes.value.length > 0) currentPlugins['limit-conn'].redis_cluster_nodes = redisClusterNodes.value
-      if (redisClusterName.value) currentPlugins['limit-conn'].redis_cluster_name = redisClusterName.value
-      if (redisPassword.value) currentPlugins['limit-conn'].redis_password = redisPassword.value
-      if (redisTimeout.value !== undefined) currentPlugins['limit-conn'].redis_timeout = redisTimeout.value
-      if (redisClusterSsl.value !== undefined) currentPlugins['limit-conn'].redis_cluster_ssl = redisClusterSsl.value
-      if (redisClusterSslVerify.value !== undefined) currentPlugins['limit-conn'].redis_cluster_ssl_verify = redisClusterSslVerify.value
+      if (redisClusterNodes.value.length > 0) currentPlugins['limit-count'].redis_cluster_nodes = redisClusterNodes.value
+      if (redisClusterName.value) currentPlugins['limit-count'].redis_cluster_name = redisClusterName.value
+      if (redisPassword.value) currentPlugins['limit-count'].redis_password = redisPassword.value
+      if (redisTimeout.value !== undefined) currentPlugins['limit-count'].redis_timeout = redisTimeout.value
+      if (redisClusterSsl.value !== undefined) currentPlugins['limit-count'].redis_cluster_ssl = redisClusterSsl.value
+      if (redisClusterSslVerify.value !== undefined) currentPlugins['limit-count'].redis_cluster_ssl_verify = redisClusterSslVerify.value
     }
     
-    setPluginEnabled(currentPlugins['limit-conn'], true)
+    setPluginEnabled(currentPlugins['limit-count'], true)
   } else {
-    currentPlugins['limit-conn'] = currentPlugins['limit-conn'] || {}
-    setPluginEnabled(currentPlugins['limit-conn'], false)
+    currentPlugins['limit-count'] = currentPlugins['limit-count'] || {}
+    setPluginEnabled(currentPlugins['limit-count'], false)
   }
   
   updatePlugins(currentPlugins)
@@ -525,30 +522,25 @@ const handleEnableChange = (value) => {
 const updatePlugin = (updates) => {
   const currentPlugins = { ...plugins.value }
   
-  currentPlugins['limit-conn'] = {
-    ...limitConnPlugin.value,
-    ...updates,
-    key_type: 'var_combination' // 确保 key_type 始终为 var_combination
+  currentPlugins['limit-count'] = {
+    ...limitCountPlugin.value,
+    ...updates
   }
-  setPluginEnabled(currentPlugins['limit-conn'], enabled.value)
+  setPluginEnabled(currentPlugins['limit-count'], enabled.value)
   
   updatePlugins(currentPlugins)
 }
 
-const handleConnChange = (value) => {
-  updatePlugin({ conn: value > 0 ? value : 1 })
+const handleCountChange = (value) => {
+  updatePlugin({ count: value > 0 ? value : 1 })
 }
 
-const handleBurstChange = (value) => {
-  updatePlugin({ burst: value })
+const handleTimeWindowChange = (value) => {
+  updatePlugin({ time_window: value > 0 ? value : 60 })
 }
 
-const handleDefaultConnDelayChange = (value) => {
-  updatePlugin({ default_conn_delay: value > 0 ? value : 1 })
-}
-
-const handleOnlyUseDefaultDelayChange = (value) => {
-  updatePlugin({ only_use_default_delay: value })
+const handleKeyTypeChange = (value) => {
+  updatePlugin({ key_type: value })
 }
 
 const handleKeyChange = (value) => {
@@ -556,23 +548,39 @@ const handleKeyChange = (value) => {
 }
 
 const handleRejectionCodeChange = (value) => {
-  updatePlugin({ rejection_code: value })
+  updatePlugin({ rejected_code: value })
 }
 
 const handleRejectionMsgChange = (value) => {
   if (value) {
-    updatePlugin({ rejection_msg: value })
+    updatePlugin({ rejected_msg: value })
   } else {
     const currentPlugins = { ...plugins.value }
-    currentPlugins['limit-conn'] = { ...limitConnPlugin.value }
-    delete currentPlugins['limit-conn'].rejection_msg
-    setPluginEnabled(currentPlugins['limit-conn'], enabled.value)
+    currentPlugins['limit-count'] = { ...limitCountPlugin.value }
+    delete currentPlugins['limit-count'].rejected_msg
+    setPluginEnabled(currentPlugins['limit-count'], enabled.value)
     updatePlugins(currentPlugins)
   }
 }
 
+const handleShowLimitQuotaHeaderChange = (value) => {
+  updatePlugin({ show_limit_quota_header: value })
+}
+
 const handleAllowDegradationChange = (value) => {
   updatePlugin({ allow_degradation: value })
+}
+
+const handleGroupChange = (value) => {
+  if (value) {
+    updatePlugin({ group: value })
+  } else {
+    const currentPlugins = { ...plugins.value }
+    currentPlugins['limit-count'] = { ...limitCountPlugin.value }
+    delete currentPlugins['limit-count'].group
+    setPluginEnabled(currentPlugins['limit-count'], enabled.value)
+    updatePlugins(currentPlugins)
+  }
 }
 
 const handlePolicyChange = (value) => {
@@ -592,9 +600,9 @@ const handleRedisUsernameChange = (value) => {
     updatePlugin({ redis_username: value })
   } else {
     const currentPlugins = { ...plugins.value }
-    currentPlugins['limit-conn'] = { ...limitConnPlugin.value }
-    delete currentPlugins['limit-conn'].redis_username
-    setPluginEnabled(currentPlugins['limit-conn'], enabled.value)
+    currentPlugins['limit-count'] = { ...limitCountPlugin.value }
+    delete currentPlugins['limit-count'].redis_username
+    setPluginEnabled(currentPlugins['limit-count'], enabled.value)
     updatePlugins(currentPlugins)
   }
 }
@@ -604,9 +612,9 @@ const handleRedisPasswordChange = (value) => {
     updatePlugin({ redis_password: value })
   } else {
     const currentPlugins = { ...plugins.value }
-    currentPlugins['limit-conn'] = { ...limitConnPlugin.value }
-    delete currentPlugins['limit-conn'].redis_password
-    setPluginEnabled(currentPlugins['limit-conn'], enabled.value)
+    currentPlugins['limit-count'] = { ...limitCountPlugin.value }
+    delete currentPlugins['limit-count'].redis_password
+    setPluginEnabled(currentPlugins['limit-count'], enabled.value)
     updatePlugins(currentPlugins)
   }
 }
@@ -636,9 +644,9 @@ const handleRedisClusterNameChange = (value) => {
     updatePlugin({ redis_cluster_name: value })
   } else {
     const currentPlugins = { ...plugins.value }
-    currentPlugins['limit-conn'] = { ...limitConnPlugin.value }
-    delete currentPlugins['limit-conn'].redis_cluster_name
-    setPluginEnabled(currentPlugins['limit-conn'], enabled.value)
+    currentPlugins['limit-count'] = { ...limitCountPlugin.value }
+    delete currentPlugins['limit-count'].redis_cluster_name
+    setPluginEnabled(currentPlugins['limit-count'], enabled.value)
     updatePlugins(currentPlugins)
   }
 }
@@ -684,7 +692,12 @@ const handleRedisClusterSslVerifyChange = (value) => {
   color: #e6a23c;
 }
 
-.key-description {
+.key-type-desc-item :deep(.el-form-item__content) {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.key-type-description {
   margin-top: 12px;
   padding: 16px;
   background: linear-gradient(135deg, #f5f7fa 0%, #fafbfc 100%);
@@ -692,15 +705,42 @@ const handleRedisClusterSslVerifyChange = (value) => {
   border: 1px solid #e4e7ed;
 }
 
-.description-content {
-  font-size: 13px;
-  color: #606266;
-  line-height: 1.8;
+.description-item {
+  margin-bottom: 20px;
   padding: 16px;
   background: #ffffff;
   border-radius: 6px;
   border-left: 4px solid #409eff;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.description-item:last-child {
+  margin-bottom: 0;
+  border-left-color: #67c23a;
+}
+
+.description-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 14px;
+  color: #303133;
+}
+
+.description-title .el-icon {
+  font-size: 18px;
+  color: #409eff;
+}
+
+.description-item:last-child .description-title .el-icon {
+  color: #67c23a;
+}
+
+.description-content {
+  font-size: 13px;
+  color: #606266;
+  line-height: 1.8;
 }
 
 .description-content p {

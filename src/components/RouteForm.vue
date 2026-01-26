@@ -288,8 +288,8 @@
 <script setup>
 import { ref, onMounted, watch, defineExpose, nextTick } from 'vue'
 import { Plus, Delete } from '@element-plus/icons-vue'
-import { upstreamApi } from '../../utils/api'
-import LabelsInput from '../LabelsInput.vue'
+import { upstreamApi } from '@/utils/api'
+import LabelsInput from '@/components/LabelsInput.vue'
 
 // 直接传入路由数据结构（APISIX 路由结构）
 const props = defineProps({
