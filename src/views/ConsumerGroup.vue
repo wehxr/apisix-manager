@@ -4,15 +4,12 @@
       <template #header>
         <div class="card-header">
           <span>消费者组管理</span>
+          <el-button type="primary" @click="handleAdd" class="create-btn">
+            <el-icon><Plus /></el-icon>
+            <span class="btn-text">创建消费者组</span>
+          </el-button>
         </div>
       </template>
-
-      <div class="action-bar">
-        <el-button type="primary" @click="handleAdd" class="create-btn">
-          <el-icon><Plus /></el-icon>
-          <span class="btn-text">创建消费者组</span>
-        </el-button>
-      </div>
       <div class="table-wrapper">
         <el-table :data="groupList" v-loading="loading" style="width: 100%">
         <el-table-column prop="name" label="名称" width="200">
@@ -288,11 +285,6 @@ onMounted(() => {
   gap: 12px;
 }
 
-.action-bar {
-  margin-bottom: 16px;
-  display: flex;
-  justify-content: flex-end;
-}
 
 .create-btn .btn-text {
   margin-left: 4px;

@@ -4,56 +4,50 @@
       <template #header>
         <div class="card-header">
           <span>全局规则</span>
+          <el-dropdown @command="handleAddPlugin" trigger="click">
+            <el-button type="primary">
+              添加插件<el-icon class="el-icon--right"><arrow-down /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item 
+                  v-for="pluginKey in availablePlugins" 
+                  :key="pluginKey" 
+                  :command="pluginKey"
+                  :disabled="isPluginAdded(pluginKey)"
+                >
+                  {{ PLUGIN_NAMES[pluginKey] }}
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </template>
 
       <div class="table-wrapper">
-        <el-table :data="globalRuleList" v-loading="loading" style="width: 100%">
-          <el-table-column prop="id" label="规则 ID" width="200" />
-          <el-table-column prop="plugins" label="插件" min-width="250">
+        <el-table :data="pluginList" v-loading="loading" style="width: 100%">
+          <el-table-column prop="name" label="插件名称">
             <template #default="{ row }">
-              <div style="display: flex; flex-wrap: wrap; gap: 4px;">
-                <template v-if="row.plugins" v-for="(plugin, key) in row.plugins" :key="key">
-                  <el-tag
-                    v-if="isPluginEnabled(plugin)"
-                    size="small"
-                  >
-                    {{ getPluginName(key) }}
-                  </el-tag>
-                </template>
-                <span v-if="!row.plugins || !Object.keys(row.plugins || {}).some(key => isPluginEnabled(row.plugins[key]))" style="color: #909399">-</span>
-              </div>
+              <span>{{ getPluginName(row.type) }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="create_time" label="创建时间" width="180">
+          <el-table-column prop="status" label="状态" >
             <template #default="{ row }">
-              <span>{{ formatTimestamp(row.create_time) }}</span>
+              <el-tag :type="row.enabled ? 'success' : 'info'" size="small">
+                {{ row.enabled ? '已启用' : '已禁用' }}
+              </el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="update_time" label="更新时间" width="180">
+          <el-table-column prop="update_time" label="更新时间" >
             <template #default="{ row }">
               <span>{{ formatTimestamp(row.update_time) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="220" fixed="right" class-name="action-column">
+          <el-table-column label="操作" width="180" fixed="right" class-name="action-column">
             <template #default="{ row }">
               <div class="action-buttons">
-                <el-dropdown @command="(command) => handlePluginCommand(row, command)" trigger="click">
-                  <el-button size="small">
-                    插件<el-icon class="el-icon--right"><arrow-down /></el-icon>
-                  </el-button>
-                  <template #dropdown>
-                    <el-dropdown-menu>
-                      <el-dropdown-item 
-                        v-for="pluginKey in availablePlugins" 
-                        :key="pluginKey" 
-                        :command="pluginKey"
-                      >
-                        {{ PLUGIN_NAMES[pluginKey] }}
-                      </el-dropdown-item>
-                    </el-dropdown-menu>
-                  </template>
-                </el-dropdown>
+                <el-button size="small" @click="handleEditPlugin(row)">编辑</el-button>
+                <el-button size="small" type="danger" @click="handleDeletePlugin(row)">删除</el-button>
               </div>
             </template>
           </el-table-column>
@@ -75,11 +69,11 @@
 
 <script setup>
 import { ref, onMounted, computed, nextTick } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { globalRuleApi } from '@/utils/api'
 import { formatTimestamp } from '@/utils/format'
-import { isPluginEnabled, getPluginName, PLUGIN_NAMES, RESOURCE_TYPES, getPluginsByResourceType } from '@/utils/plugin'
+import { isPluginEnabled, getPluginName, PLUGIN_NAMES, getPluginsByResourceType } from '@/utils/plugin'
 import { generateId } from '@/utils/id'
 import PluginDialog from '@/components/PluginDialog.vue'
 
@@ -92,9 +86,35 @@ const currentGlobalRulePlugins = ref({})
 
 // 获取可用于 global_rule 的插件列表
 const availablePlugins = computed(() => {
-  return getPluginsByResourceType(RESOURCE_TYPES.GLOBAL_RULE)
+  return getPluginsByResourceType('global_rule')
 })
 
+// 将全局规则列表转换为插件列表（每行一个插件）
+const pluginList = computed(() => {
+  const plugins = []
+  
+  globalRuleList.value.forEach(rule => {
+    const rulePlugins = rule.plugins || {}
+    Object.keys(rulePlugins).forEach(pluginType => {
+      const pluginConfig = rulePlugins[pluginType]
+      plugins.push({
+        type: pluginType,
+        config: pluginConfig,
+        enabled: isPluginEnabled(pluginConfig),
+        globalRuleId: rule.id,
+        update_time: rule.update_time,
+        create_time: rule.create_time
+      })
+    })
+  })
+  
+  return plugins
+})
+
+// 检查插件是否已添加
+const isPluginAdded = (pluginType) => {
+  return pluginList.value.some(plugin => plugin.type === pluginType)
+}
 
 const loadData = async () => {
   loading.value = true
@@ -123,13 +143,58 @@ const loadData = async () => {
   }
 }
 
-// 处理插件下拉菜单命令
-const handlePluginCommand = (row, command) => {
-  handleConfigPlugin(row, command)
+// 获取或创建全局规则 ID
+const getOrCreateGlobalRuleId = async () => {
+  if (globalRuleList.value.length > 0) {
+    return globalRuleList.value[0].id
+  }
+  
+  // 如果没有全局规则，创建一个
+  const newId = generateId('global_rule')
+  try {
+    await globalRuleApi.create(newId, { plugins: {} })
+    await loadData()
+    return newId
+  } catch (error) {
+    console.error('创建全局规则失败:', error)
+    throw error
+  }
 }
 
-// 配置单个插件
-const handleConfigPlugin = async (row, pluginType) => {
+// 处理添加插件
+const handleAddPlugin = async (pluginType) => {
+  if (isPluginAdded(pluginType)) {
+    ElMessage.warning('该插件已存在')
+    return
+  }
+  
+  try {
+    const globalRuleId = await getOrCreateGlobalRuleId()
+    const currentRule = globalRuleList.value.find(r => r.id === globalRuleId) || { plugins: {} }
+    
+    // 先关闭对话框（如果已打开），确保状态重置
+    if (pluginDialogVisible.value) {
+      pluginDialogVisible.value = false
+      await nextTick()
+    }
+    
+    // 设置所有必要的值
+    currentGlobalRuleId.value = globalRuleId
+    currentPluginType.value = pluginType
+    currentGlobalRulePlugins.value = currentRule.plugins || {}
+    
+    // 等待一个 tick 确保响应式更新完成
+    await nextTick()
+    
+    // 打开对话框
+    pluginDialogVisible.value = true
+  } catch (error) {
+    ElMessage.error('添加插件失败')
+  }
+}
+
+// 处理编辑插件
+const handleEditPlugin = async (row) => {
   // 先关闭对话框（如果已打开），确保状态重置
   if (pluginDialogVisible.value) {
     pluginDialogVisible.value = false
@@ -137,15 +202,55 @@ const handleConfigPlugin = async (row, pluginType) => {
   }
   
   // 设置所有必要的值
-  currentGlobalRuleId.value = row.id
-  currentPluginType.value = pluginType
-  currentGlobalRulePlugins.value = row.plugins || {}
+  currentGlobalRuleId.value = row.globalRuleId
+  currentPluginType.value = row.type
+  const currentRule = globalRuleList.value.find(r => r.id === row.globalRuleId)
+  currentGlobalRulePlugins.value = currentRule?.plugins || {}
   
   // 等待一个 tick 确保响应式更新完成
   await nextTick()
   
   // 打开对话框
   pluginDialogVisible.value = true
+}
+
+// 处理删除插件
+const handleDeletePlugin = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除插件 "${getPluginName(row.type)}" 吗？`,
+      '确认删除',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    
+    const globalRuleId = row.globalRuleId
+    const currentRule = globalRuleList.value.find(r => r.id === globalRuleId)
+    if (!currentRule) {
+      ElMessage.error('未找到对应的全局规则')
+      return
+    }
+    
+    // 从 plugins 中删除该插件
+    const updatedPlugins = { ...currentRule.plugins }
+    delete updatedPlugins[row.type]
+    
+    // 更新全局规则
+    await globalRuleApi.update(globalRuleId, {
+      plugins: updatedPlugins
+    })
+    
+    ElMessage.success('删除成功')
+    await loadData()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除插件失败:', error)
+      ElMessage.error('删除插件失败')
+    }
+  }
 }
 
 // 处理插件保存成功

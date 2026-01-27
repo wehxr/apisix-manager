@@ -6,73 +6,95 @@
           <img src="/logo2.svg" alt="APISIX" class="logo-img" />
           <h2 class="logo-text">APISIX Manager</h2>
         </div>
-        <div class="menu-wrapper">
-          <div class="nav-menu" :class="{ 'mobile-menu-open': mobileMenuOpen }">
-            <router-link to="/dashboard" class="nav-item" :class="{ active: activeMenu === '/dashboard' }" @click="closeMobileMenu">
-              <el-icon><Odometer /></el-icon>
-              <span>仪表盘</span>
-            </router-link>
-            <router-link to="/route" class="nav-item" :class="{ active: activeMenu === '/route' }" @click="closeMobileMenu">
-              <el-icon><Connection /></el-icon>
-              <span>路由管理</span>
-            </router-link>
-            <router-link to="/upstream" class="nav-item" :class="{ active: activeMenu === '/upstream' }" @click="closeMobileMenu">
-              <el-icon><Monitor /></el-icon>
-              <span>上游服务</span>
-            </router-link>
-            <div class="nav-item nav-item-dropdown" :class="{ active: isConsumerMenuActive }">
-              <el-dropdown trigger="hover" @command="handleConsumerMenuCommand" placement="bottom-start">
-                <span class="nav-item-content">
-                  <el-icon><User /></el-icon>
-                  <span>消费者</span>
-                  <el-icon class="dropdown-icon"><ArrowDown /></el-icon>
-                </span>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="/consumer" :class="{ 'is-active': activeMenu === '/consumer' }">
-                      消费者
-                    </el-dropdown-item>
-                    <el-dropdown-item command="/consumer-group" :class="{ 'is-active': activeMenu === '/consumer-group' }">
-                      消费者组
-                    </el-dropdown-item>
-                  </el-dropdown-menu>
+        
+        <!-- Desktop Menu -->
+        <div class="menu-wrapper desktop-menu">
+          <el-menu
+            :default-active="activeMenu"
+            mode="horizontal"
+            router
+            :ellipsis="false"
+            class="el-menu-demo"
+          >
+            <template v-for="item in menuItems" :key="item.path || item.label">
+              <el-sub-menu v-if="item.children" :index="item.label">
+                <template #title>
+                  <el-icon><component :is="item.icon" /></el-icon>
+                  <span>{{ item.label }}</span>
                 </template>
-              </el-dropdown>
-            </div>
-            <!-- 移动端直接显示两个菜单项 -->
-            <router-link to="/consumer" class="nav-item nav-item-mobile" :class="{ active: activeMenu === '/consumer' }" @click="closeMobileMenu">
-              <el-icon><User /></el-icon>
-              <span>消费者</span>
-            </router-link>
-            <router-link to="/consumer-group" class="nav-item nav-item-mobile" :class="{ active: activeMenu === '/consumer-group' }" @click="closeMobileMenu">
-              <el-icon><User /></el-icon>
-              <span>消费者组</span>
-            </router-link>
-            <router-link to="/ssl" class="nav-item" :class="{ active: activeMenu === '/ssl' }" @click="closeMobileMenu">
-              <el-icon><Lock /></el-icon>
-              <span>证书管理</span>
-            </router-link>
-            <router-link to="/global-rule" class="nav-item" :class="{ active: activeMenu === '/global-rule' }" @click="closeMobileMenu">
-              <el-icon><Tools /></el-icon>
-              <span>全局规则</span>
-            </router-link>
-          </div>
-          <div class="header-actions">
-            <router-link to="/settings" class="nav-item settings-item" :class="{ active: activeMenu === '/settings' }" @click="closeMobileMenu">
-              <el-icon><Setting /></el-icon>
-            </router-link>
-            <el-button 
-              class="mobile-menu-btn" 
-              @click="toggleMobileMenu"
-              :icon="mobileMenuOpen ? Close : Menu"
-              circle
-            />
-          </div>
+                <el-menu-item 
+                  v-for="child in item.children" 
+                  :key="child.path" 
+                  :index="child.path"
+                >
+                  {{ child.label }}
+                </el-menu-item>
+              </el-sub-menu>
+              
+              <el-menu-item v-else :index="item.path">
+                <el-icon><component :is="item.icon" /></el-icon>
+                <span>{{ item.label }}</span>
+              </el-menu-item>
+            </template>
+          </el-menu>
+        </div>
+
+        <div class="header-actions">
+          <router-link to="/settings" class="settings-btn">
+            <el-icon><Setting /></el-icon>
+          </router-link>
+          <el-button 
+            class="mobile-menu-btn" 
+            @click="toggleMobileMenu"
+            :icon="Menu"
+            circle
+            text
+          />
         </div>
       </div>
     </el-header>
-    <!-- 移动端遮罩层 -->
-    <div v-if="mobileMenuOpen" class="mobile-overlay" @click="closeMobileMenu"></div>
+
+    <!-- Mobile Drawer Menu -->
+    <el-drawer
+      v-model="mobileMenuOpen"
+      direction="ltr"
+      size="280px"
+      :with-header="false"
+      class="mobile-drawer"
+    >
+      <div class="mobile-menu-header">
+        <img src="/logo2.svg" alt="APISIX" class="mobile-logo-img" />
+        <h2 class="mobile-logo-text">APISIX Manager</h2>
+      </div>
+      <el-menu
+        :default-active="activeMenu"
+        class="mobile-el-menu"
+        router
+      >
+        <template v-for="item in menuItems" :key="item.path || item.label">
+          <el-sub-menu v-if="item.children" :index="item.label">
+            <template #title>
+              <el-icon><component :is="item.icon" /></el-icon>
+              <span>{{ item.label }}</span>
+            </template>
+            <el-menu-item 
+              v-for="child in item.children" 
+              :key="child.path" 
+              :index="child.path"
+              @click="closeMobileMenu"
+            >
+              {{ child.label }}
+            </el-menu-item>
+          </el-sub-menu>
+          
+          <el-menu-item v-else :index="item.path" @click="closeMobileMenu">
+            <el-icon><component :is="item.icon" /></el-icon>
+            <span>{{ item.label }}</span>
+          </el-menu-item>
+        </template>
+      </el-menu>
+    </el-drawer>
+
     <el-main class="main-content">
       <div class="main-content-wrapper">
         <router-view />
@@ -84,16 +106,27 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Lock, User, Monitor, Connection, Setting, Odometer, Menu, Close, Tools, ArrowDown } from '@element-plus/icons-vue'
+import { Lock, User, Monitor, Connection, Setting, Odometer, Menu, Tools } from '@element-plus/icons-vue'
 
 const route = useRoute()
-const router = useRouter()
 const activeMenu = computed(() => route.path)
 const mobileMenuOpen = ref(false)
 
-const isConsumerMenuActive = computed(() => {
-  return activeMenu.value === '/consumer' || activeMenu.value === '/consumer-group'
-})
+const menuItems = [
+  { path: '/dashboard', label: '仪表盘', icon: Odometer },
+  { path: '/route', label: '路由管理', icon: Connection },
+  { path: '/upstream', label: '上游服务', icon: Monitor },
+  { 
+    label: '消费者', 
+    icon: User,
+    children: [
+      { path: '/consumer', label: '消费者' },
+      { path: '/consumer-group', label: '消费者组' }
+    ]
+  },
+  { path: '/ssl', label: '证书管理', icon: Lock },
+  { path: '/global-rule', label: '全局规则', icon: Tools },
+]
 
 const toggleMobileMenu = () => {
   mobileMenuOpen.value = !mobileMenuOpen.value
@@ -101,11 +134,6 @@ const toggleMobileMenu = () => {
 
 const closeMobileMenu = () => {
   mobileMenuOpen.value = false
-}
-
-const handleConsumerMenuCommand = (command) => {
-  router.push(command)
-  closeMobileMenu()
 }
 </script>
 
@@ -141,121 +169,102 @@ const handleConsumerMenuCommand = (command) => {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-right: 20px;
+  margin-right: 40px;
   flex-shrink: 0;
 }
 
 .logo-text {
-  font-size: 16px;
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
   white-space: nowrap;
+}
+
+.logo-img {
+  width: 32px;
+  height: 32px;
 }
 
 .menu-wrapper {
   flex: 1;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  min-width: 0;
-  overflow: visible;
-  gap: 10px;
+  height: 100%;
+  overflow: hidden;
 }
 
-.logo-img {
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
+.el-menu-demo {
+  border-bottom: none !important;
+  background-color: transparent;
+  width: 100%;
+  height: 64px;
 }
 
-.nav-menu {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  flex: 1;
-  overflow: visible;
-}
-
-.nav-item {
-  display: inline-flex;
-  align-items: center;
+:deep(.el-menu--horizontal > .el-menu-item),
+:deep(.el-menu--horizontal > .el-sub-menu .el-sub-menu__title) {
   height: 64px;
   line-height: 64px;
-  padding: 0 16px;
-  color: #606266;
-  text-decoration: none;
   border-bottom: 2px solid transparent;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition: all 0.3s;
-  cursor: pointer;
+  color: #606266;
+  font-size: 15px;
 }
 
-.nav-item:hover {
-  color: var(--el-color-primary);
-  border-bottom-color: var(--el-color-primary);
-}
-
-.nav-item.active {
-  color: var(--el-color-primary);
-  border-bottom-color: var(--el-color-primary);
-}
-
-.nav-item .el-icon {
-  margin-right: 6px;
-  font-size: 18px;
-  flex-shrink: 0;
-}
-
-.nav-item-dropdown {
-  position: relative;
-}
-
-.nav-item-content {
-  display: inline-flex;
-  align-items: center;
-  cursor: pointer;
-}
-
-.dropdown-icon {
-  margin-left: 4px;
-  margin-right: 0;
-  font-size: 12px;
-  transition: transform 0.3s;
-}
-
-.nav-item-dropdown:hover .dropdown-icon {
-  transform: rotate(180deg);
-}
-
-.nav-item-mobile {
-  display: none;
-}
-
-:deep(.el-dropdown-menu__item.is-active) {
-  color: var(--el-color-primary);
-  background-color: var(--el-color-primary-light-9);
+:deep(.el-menu--horizontal > .el-menu-item.is-active),
+:deep(.el-menu--horizontal > .el-sub-menu.is-active .el-sub-menu__title) {
+  border-bottom: 2px solid var(--el-color-primary);
+  color: var(--el-color-primary) !important;
 }
 
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 16px;
+  margin-left: 20px;
 }
 
-.settings-item {
-  padding: 0 16px;
-}
-
-.settings-item .el-icon {
-  margin-right: 0;
+.settings-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #606266;
   font-size: 20px;
+  transition: color 0.3s;
+  padding: 8px;
+}
+
+.settings-btn:hover {
+  color: var(--el-color-primary);
 }
 
 .mobile-menu-btn {
   display: none;
+  font-size: 24px;
+  color: #606266;
 }
 
-.mobile-overlay {
-  display: none;
+/* Mobile Drawer Styles */
+.mobile-menu-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px;
+  border-bottom: 1px solid #e4e7ed;
+  margin-bottom: 10px;
+}
+
+.mobile-logo-img {
+  width: 28px;
+  height: 28px;
+}
+
+.mobile-logo-text {
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.mobile-el-menu {
+  border-right: none;
 }
 
 .main-content {
@@ -270,99 +279,32 @@ const handleConsumerMenuCommand = (command) => {
   width: 100%;
 }
 
-/* 移动端适配 */
+/* Responsive Design */
 @media (max-width: 768px) {
-  .header-content {
-    padding: 0 12px;
-  }
-
-  .logo-text {
-    font-size: 14px;
-  }
-
-  .logo-img {
-    width: 28px;
-    height: 28px;
-  }
-
-  .mobile-menu-btn {
-    display: inline-flex !important;
-    padding: 8px;
-  }
-
-  .nav-menu {
-    position: fixed;
-    top: 64px;
-    left: 0;
-    right: 0;
-    background: #ffffff;
-    flex-direction: column;
-    align-items: stretch;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.3s ease;
-    z-index: 999;
-  }
-
-  .nav-menu.mobile-menu-open {
-    max-height: 500px;
-    padding: 10px 0;
-  }
-
-  .nav-item-dropdown {
+  .desktop-menu {
     display: none;
   }
 
-  .nav-item-mobile {
-    display: inline-flex !important;
+  .mobile-menu-btn {
+    display: inline-flex;
   }
 
-  .nav-item {
-    height: 48px;
-    line-height: 48px;
-    padding: 0 20px;
-    border-bottom: 1px solid #f0f0f0;
-    border-left: 3px solid transparent;
-    justify-content: flex-start;
+  .header-content {
+    padding: 0 16px;
   }
-
-  .nav-item.active {
-    border-left-color: var(--el-color-primary);
-    background-color: #f5f7fa;
+  
+  .logo {
+    margin-right: auto;
   }
-
-  .nav-item .el-icon {
-    margin-right: 12px;
-  }
-
-  .settings-item {
-    padding: 0 20px;
-  }
-
-  .mobile-overlay {
-    display: block;
-    position: fixed;
-    top: 64px;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.3);
-    z-index: 998;
-  }
-
+  
   .main-content {
-    padding: 12px;
+    padding: 16px;
   }
 }
 
 @media (max-width: 480px) {
   .logo-text {
-    font-size: 12px;
-  }
-
-  .header-content {
-    padding: 0 8px;
+    display: none;
   }
 }
 </style>

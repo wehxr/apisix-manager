@@ -19,13 +19,13 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getDialogWidth } from '@/utils/format'
-import { getPluginName, PLUGIN_NAMES, isPluginAvailableForResource, RESOURCE_TYPES, isPluginEnabled } from '@/utils/plugin'
+import { getPluginName, isPluginAvailableForResource } from '@/utils/plugin'
 import { generateId } from '@/utils/id'
 import { routeApi, pluginConfigApi, globalRuleApi, consumerApi } from '@/utils/api'
-import pluginResourcesConfig from '@/config/plugin-resources.json'
+import pluginResourcesConfig from '@/config/plugin.json'
 
 // 静态导入所有插件组件
 import PluginFormRequestId from '@/components/PluginForm/PluginFormRequestId.vue'
@@ -83,7 +83,7 @@ const props = defineProps({
   resourceType: {
     type: String,
     required: true,
-    validator: (value) => Object.values(RESOURCE_TYPES).includes(value)
+    validator: (value) => ['route', 'global_rule', 'consumer'].includes(value)
   },
   // 资源 ID（如 route id, global_rule id 等）
   resourceId: {
@@ -106,7 +106,7 @@ const emit = defineEmits(['update:modelValue', 'saved'])
 
 // 获取插件组件
 const getPluginComponent = (pluginType, resourceType) => {
-  const pluginConfig = pluginResourcesConfig.plugins[pluginType]
+  const pluginConfig = pluginResourcesConfig[pluginType]
   if (!pluginConfig) {
     return null
   }
@@ -180,11 +180,11 @@ const openDialog = async (pluginType, resourceType) => {
   currentPluginComponent.value = component
 
   // 根据资源类型初始化配置
-  if (resourceType === RESOURCE_TYPES.ROUTE) {
+  if (resourceType === 'route') {
     await initRouteConfig()
-  } else if (resourceType === RESOURCE_TYPES.GLOBAL_RULE) {
+  } else if (resourceType === 'global_rule') {
     initGlobalRuleConfig()
-  } else if (resourceType === RESOURCE_TYPES.CONSUMER) {
+  } else if (resourceType === 'consumer') {
     await initConsumerConfig()
   } else {
     // 其他资源类型的初始化逻辑
@@ -247,13 +247,13 @@ const initConsumerConfig = () => {
 
 // 处理插件配置更新
 const handlePluginConfigUpdate = (value) => {
-  if (props.resourceType === RESOURCE_TYPES.ROUTE) {
+  if (props.resourceType === 'route') {
     // 对于 route，子组件会返回包含 plugins 的对象
     currentPluginConfig.value = {
       plugin_config_id: currentPluginConfig.value.plugin_config_id,
       plugins: value.plugins || {}
     }
-  } else if (props.resourceType === RESOURCE_TYPES.GLOBAL_RULE || props.resourceType === RESOURCE_TYPES.CONSUMER) {
+  } else if (props.resourceType === 'global_rule' || props.resourceType === 'consumer') {
     // 对于 global_rule 和 consumer，合并 plugins
     currentPluginConfig.value = {
       plugins: {
@@ -270,11 +270,11 @@ const handlePluginConfigUpdate = (value) => {
 const handleSave = async () => {
   saving.value = true
   try {
-    if (props.resourceType === RESOURCE_TYPES.ROUTE) {
+    if (props.resourceType === 'route') {
       await saveRoutePlugin()
-    } else if (props.resourceType === RESOURCE_TYPES.GLOBAL_RULE) {
+    } else if (props.resourceType === 'global_rule') {
       await saveGlobalRulePlugin()
-    } else if (props.resourceType === RESOURCE_TYPES.CONSUMER) {
+    } else if (props.resourceType === 'consumer') {
       await saveConsumerPlugin()
     } else {
       ElMessage.warning(`暂不支持保存 ${props.resourceType} 类型的插件配置`)

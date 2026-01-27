@@ -4,15 +4,12 @@
       <template #header>
         <div class="card-header">
           <span>消费者管理</span>
+          <el-button type="primary" @click="handleAdd" class="create-btn">
+            <el-icon><Plus /></el-icon>
+            <span class="btn-text">创建消费者</span>
+          </el-button>
         </div>
       </template>
-
-      <div class="action-bar">
-        <el-button type="primary" @click="handleAdd" class="create-btn">
-          <el-icon><Plus /></el-icon>
-          <span class="btn-text">创建消费者</span>
-        </el-button>
-      </div>
       <div class="table-wrapper">
         <el-table :data="consumerList" v-loading="loading" style="width: 100%">
         <el-table-column prop="username" label="用户名"/>
@@ -165,7 +162,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, ArrowDown } from '@element-plus/icons-vue'
 import { consumerApi, consumerGroupApi } from '../utils/api'
 import { formatTimestamp, getDialogWidth } from '../utils/format'
-import { isPluginEnabled, getPluginName, PLUGIN_NAMES, RESOURCE_TYPES, getPluginsByResourceType } from '../utils/plugin'
+import { isPluginEnabled, getPluginName, PLUGIN_NAMES, getPluginsByResourceType } from '../utils/plugin'
 import LabelsInput from '../components/LabelsInput.vue'
 import PluginDialog from '../components/PluginDialog.vue'
 
@@ -200,7 +197,7 @@ const currentConsumerPlugins = ref({})
 
 // 获取可用于 consumer 类型的插件列表
 const availablePlugins = computed(() => {
-  return getPluginsByResourceType(RESOURCE_TYPES.CONSUMER)
+  return getPluginsByResourceType('consumer')
 })
 
 // 分页配置
@@ -214,7 +211,8 @@ const form = ref({
   username: '',
   desc: '',
   group_id: '',
-  labels: {}
+  labels: {},
+  plugins: {}
 })
 
 const rules = {
@@ -308,7 +306,8 @@ const handleAdd = () => {
     username: '',
     desc: '',
     group_id: '',
-    labels: {}
+    labels: {},
+    plugins: {}
   }
   dialogVisible.value = true
 }
@@ -323,7 +322,8 @@ const handleEdit = async (row) => {
       username: data.username || row.username,
       desc: data.desc || '',
       group_id: data.group_id || '',
-      labels: data.labels || row.labels || {}
+      labels: data.labels || row.labels || {},
+      plugins: data.plugins || row.plugins || {}
     }
     dialogVisible.value = true
   } catch (error) {
@@ -348,6 +348,11 @@ const handleSubmit = async () => {
       // 添加标签
       if (form.value.labels && typeof form.value.labels === 'object' && Object.keys(form.value.labels).length > 0) {
         consumerData.labels = form.value.labels
+      }
+
+      // 编辑时保留现有的插件配置
+      if (isEdit.value && form.value.plugins && typeof form.value.plugins === 'object' && Object.keys(form.value.plugins).length > 0) {
+        consumerData.plugins = form.value.plugins
       }
 
       if (isEdit.value) {
@@ -436,11 +441,6 @@ onMounted(() => {
   gap: 12px;
 }
 
-.action-bar {
-  margin-bottom: 16px;
-  display: flex;
-  justify-content: flex-end;
-}
 
 .create-btn .btn-text {
   margin-left: 4px;

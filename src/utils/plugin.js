@@ -1,26 +1,17 @@
 // 插件相关的工具函数
 
 // 导入插件资源配置
-import pluginResourcesConfig from '../config/plugin-resources.json'
-
-// 资源类型定义（从 JSON 配置生成）
-export const RESOURCE_TYPES = {
-  ROUTE: 'route',
-  GLOBAL_RULE: 'global_rule',
-  CONSUMER: 'consumer',
-  UPSTREAM: 'upstream',
-  CONSUMER_GROUP: 'consumer_group'
-}
+import pluginResourcesConfig from '../config/plugin.json'
 
 // 插件名称翻译映射（从 JSON 配置生成）
-export const PLUGIN_NAMES = Object.keys(pluginResourcesConfig.plugins).reduce((acc, key) => {
-  acc[key] = pluginResourcesConfig.plugins[key].name
+export const PLUGIN_NAMES = Object.keys(pluginResourcesConfig).reduce((acc, key) => {
+  acc[key] = pluginResourcesConfig[key].name
   return acc
 }, {})
 
 // 插件与资源的关联定义（从 JSON 配置生成）
-export const PLUGIN_RESOURCE_MAP = Object.keys(pluginResourcesConfig.plugins).reduce((acc, key) => {
-  acc[key] = pluginResourcesConfig.plugins[key].resources || []
+export const PLUGIN_RESOURCE_MAP = Object.keys(pluginResourcesConfig).reduce((acc, key) => {
+  acc[key] = pluginResourcesConfig[key].resources || []
   return acc
 }, {})
 

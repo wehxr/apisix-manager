@@ -197,7 +197,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, ArrowDown } from '@element-plus/icons-vue'
 import { routeApi, upstreamApi, pluginConfigApi } from '@/utils/api'
 import { formatTimestamp, getDialogWidth } from '@/utils/format'
-import { isPluginEnabled, getPluginName, PLUGIN_NAMES, RESOURCE_TYPES, getPluginsByResourceType } from '@/utils/plugin'
+import { isPluginEnabled, getPluginName, PLUGIN_NAMES, getPluginsByResourceType } from '@/utils/plugin'
 import { generateId } from '@/utils/id'
 import RouteForm from '@/components/RouteForm.vue'
 import PluginDialog from '@/components/PluginDialog.vue'
@@ -262,7 +262,7 @@ const getUpstreamName = (upstreamId) => {
 
 // 获取可用于 route 类型的插件列表
 const availablePlugins = computed(() => {
-  return getPluginsByResourceType(RESOURCE_TYPES.ROUTE)
+  return getPluginsByResourceType('route')
 })
 
 

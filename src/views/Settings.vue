@@ -1,6 +1,6 @@
 <template>
   <div class="settings-page">
-    <el-card class="settings-card" shadow="hover">
+    <el-card class="page-card" shadow="hover">
       <template #header>
         <div class="card-header">
           <span>系统设置</span>
@@ -94,14 +94,7 @@ const testConnection = async () => {
 
 <style scoped>
 .settings-page {
-  max-width: 800px;
-  margin: 0 auto;
-}
-
-.card-header {
-  font-size: 18px;
-  font-weight: 600;
-  color: #303133;
+  /* 移除 max-width 和 margin，让其与其他页面一样占满宽度 */
 }
 
 .settings-content {
