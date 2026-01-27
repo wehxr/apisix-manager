@@ -53,7 +53,7 @@
   },
   "limit-req": {
     "name": "请求速率限流",
-    "resources": ["route"]
+    "resources": ["route", "consumer"]
   },
   "limit-count": {
     "name": "请求数限流",
@@ -61,6 +61,10 @@
   },
   "limit-conn": {
     "name": "并发连接数限制",
-    "resources": ["route"]
+    "resources": ["route", "consumer"]
+  },
+  "file-logger": {
+    "name": "文件日志",
+    "resources": ["route", "global_rule"]
   }
 }

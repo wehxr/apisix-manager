@@ -44,6 +44,7 @@ import PluginFormUriBlocker from '@/components/PluginForm/PluginFormUriBlocker.v
 import PluginFormApiBreaker from '@/components/PluginForm/PluginFormApiBreaker.vue'
 import PluginFormGzip from '@/components/PluginForm/PluginFormGzip.vue'
 import PluginFormProxyRewrite from '@/components/PluginForm/PluginFormProxyRewrite.vue'
+import PluginFormFileLogger from '@/components/PluginForm/PluginFormFileLogger.vue'
 
 // 组件映射表
 const componentMap = {
@@ -62,7 +63,8 @@ const componentMap = {
   'PluginFormUriBlocker': PluginFormUriBlocker,
   'PluginFormApiBreaker': PluginFormApiBreaker,
   'PluginFormGzip': PluginFormGzip,
-  'PluginFormProxyRewrite': PluginFormProxyRewrite
+  'PluginFormProxyRewrite': PluginFormProxyRewrite,
+  'PluginFormFileLogger': PluginFormFileLogger
 }
 
 // 将 kebab-case 转换为 PascalCase
