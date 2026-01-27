@@ -15,7 +15,7 @@
         <el-table-column prop="username" label="用户名"/>
         <el-table-column prop="group_id" label="消费者组" width="150">
           <template #default="{ row }">
-            <el-tag v-if="row.group_id" type="info" size="small">{{ getGroupName(row.group_id) }}</el-tag>
+            <el-tag v-if="row.group_id" size="small">{{ getGroupName(row.group_id) }}</el-tag>
             <span v-else style="color: #909399">-</span>
           </template>
         </el-table-column>
