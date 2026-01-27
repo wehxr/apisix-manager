@@ -2,9 +2,9 @@
   <el-form :model="form" label-width="140px" ref="formRef" :rules="rules">
     <!-- 步骤条 -->
     <el-steps :active="currentStep" finish-status="success" align-center style="margin-bottom: 30px;">
-      <el-step title="基本信息" description="配置路由基本信息" />
-      <el-step title="匹配规则" description="配置路由匹配条件" />
-      <el-step title="上游服务" description="选择上游服务" />
+      <el-step title="基本信息"  @click="currentStep = 0" style="cursor: pointer" />
+      <el-step title="匹配规则"  @click="currentStep = 1" style="cursor: pointer" />
+      <el-step title="上游服务"  @click="currentStep = 2" style="cursor: pointer" />
     </el-steps>
 
     <!-- 步骤内容 -->

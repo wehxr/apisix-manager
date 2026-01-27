@@ -120,10 +120,10 @@
       <el-form :model="form" label-width="140px" ref="formRef" :rules="rules">
         <!-- 步骤条 -->
         <el-steps :active="currentStep" finish-status="success" align-center style="margin-bottom: 30px;">
-          <el-step title="基础配置" description="配置上游基本信息" />
-          <el-step title="节点配置" description="配置上游节点" />
-          <el-step title="超时配置" description="配置超时和重试" />
-          <el-step title="健康检测" description="配置健康检测" />
+          <el-step title="基础配置" @click="currentStep = 0" style="cursor: pointer" />
+          <el-step title="节点配置" @click="currentStep = 1" style="cursor: pointer" />
+          <el-step title="超时配置" @click="currentStep = 2" style="cursor: pointer" />
+          <el-step title="健康检测" @click="currentStep = 3" style="cursor: pointer" />
         </el-steps>
 
         <!-- 步骤内容 -->
