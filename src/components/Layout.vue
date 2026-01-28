@@ -40,6 +40,15 @@
         </div>
 
         <div class="header-actions">
+          <a 
+            href="https://apisix.apache.org/docs/apisix/admin-api/" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            class="doc-btn"
+            title="API 文档"
+          >
+            <el-icon><Link /></el-icon>
+          </a>
           <router-link to="/settings" class="settings-btn">
             <el-icon><Setting /></el-icon>
           </router-link>
@@ -106,7 +115,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Lock, User, Monitor, Connection, Setting, Odometer, Menu, Tools } from '@element-plus/icons-vue'
+import { Lock, User, Monitor, Connection, Setting, Odometer, Menu, Tools, Link } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const activeMenu = computed(() => route.path)
@@ -149,7 +158,10 @@ const closeMobileMenu = () => {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   padding: 0;
   height: 64px !important;
-  position: relative;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
   z-index: 1000;
 }
 
@@ -218,8 +230,23 @@ const closeMobileMenu = () => {
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 8px;
   margin-left: 20px;
+}
+
+.doc-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #606266;
+  font-size: 20px;
+  transition: color 0.3s;
+  padding: 8px;
+  text-decoration: none;
+}
+
+.doc-btn:hover {
+  color: var(--el-color-primary);
 }
 
 .settings-btn {
@@ -270,6 +297,7 @@ const closeMobileMenu = () => {
 .main-content {
   background-color: #f5f7fa;
   padding: 20px;
+  margin-top: 64px;
   min-height: calc(100vh - 64px);
 }
 
@@ -298,13 +326,25 @@ const closeMobileMenu = () => {
   }
   
   .main-content {
-    padding: 16px;
+    padding: 16px 12px;
+  }
+
+  .main-content-wrapper {
+    padding: 0;
   }
 }
 
 @media (max-width: 480px) {
   .logo-text {
     display: none;
+  }
+
+  .main-content {
+    padding: 12px 8px;
+  }
+
+  .header-content {
+    padding: 0 12px;
   }
 }
 </style>

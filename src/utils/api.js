@@ -7,6 +7,7 @@ export const sslApi = {
     const queryParams = new URLSearchParams()
     if (params.page) queryParams.append('page', params.page)
     if (params.page_size) queryParams.append('page_size', params.page_size)
+    if (params.label) queryParams.append('label', params.label)
     const queryString = queryParams.toString()
     return api.get(`/apisix/admin/ssls${queryString ? '?' + queryString : ''}`)
   },
@@ -22,6 +23,7 @@ export const consumerApi = {
     const queryParams = new URLSearchParams()
     if (params.page) queryParams.append('page', params.page)
     if (params.page_size) queryParams.append('page_size', params.page_size)
+    if (params.label) queryParams.append('label', params.label)
     const queryString = queryParams.toString()
     return api.get(`/apisix/admin/consumers${queryString ? '?' + queryString : ''}`)
   },
@@ -37,6 +39,8 @@ export const consumerGroupApi = {
     const queryParams = new URLSearchParams()
     if (params.page) queryParams.append('page', params.page)
     if (params.page_size) queryParams.append('page_size', params.page_size)
+    if (params.name) queryParams.append('name', params.name)
+    if (params.label) queryParams.append('label', params.label)
     const queryString = queryParams.toString()
     return api.get(`/apisix/admin/consumer_groups${queryString ? '?' + queryString : ''}`)
   },
@@ -52,6 +56,8 @@ export const upstreamApi = {
     const queryParams = new URLSearchParams()
     if (params.page) queryParams.append('page', params.page)
     if (params.page_size) queryParams.append('page_size', params.page_size)
+    if (params.name) queryParams.append('name', params.name)
+    if (params.label) queryParams.append('label', params.label)
     const queryString = queryParams.toString()
     return api.get(`/apisix/admin/upstreams${queryString ? '?' + queryString : ''}`)
   },
@@ -67,6 +73,9 @@ export const routeApi = {
     const queryParams = new URLSearchParams()
     if (params.page) queryParams.append('page', params.page)
     if (params.page_size) queryParams.append('page_size', params.page_size)
+    if (params.name) queryParams.append('name', params.name)
+    if (params.uri) queryParams.append('uri', params.uri)
+    if (params.label) queryParams.append('label', params.label)
     const queryString = queryParams.toString()
     return api.get(`/apisix/admin/routes${queryString ? '?' + queryString : ''}`)
   },

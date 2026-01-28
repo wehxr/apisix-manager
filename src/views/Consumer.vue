@@ -10,6 +10,29 @@
           </el-button>
         </div>
       </template>
+
+      <!-- 搜索过滤 -->
+      <div class="filter-wrapper">
+        <el-input
+          v-model="filterLabel"
+          placeholder="搜索标签"
+          clearable
+          style="width: 200px;"
+          @clear="handleFilter"
+          @keyup.enter="handleFilter"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+        <el-button type="primary" @click="handleFilter" style="margin-left: 12px;">
+          搜索
+        </el-button>
+        <el-button @click="handleResetFilter" v-if="filterLabel">
+          重置
+        </el-button>
+      </div>
+
       <div class="table-wrapper">
         <el-table :data="consumerList" v-loading="loading" style="width: 100%">
         <el-table-column prop="username" label="用户名"/>
@@ -31,6 +54,21 @@
                 </el-tag>
               </template>
             </div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="labels" label="标签" min-width="200">
+          <template #default="{ row }">
+            <div v-if="row.labels && Object.keys(row.labels).length > 0" style="display: flex; flex-wrap: wrap; gap: 4px;">
+              <el-tag
+                v-for="(value, key) in row.labels"
+                :key="key"
+                size="small"
+                type="info"
+              >
+                {{ key }}:{{ value }}
+              </el-tag>
+            </div>
+            <span v-else style="color: #909399">-</span>
           </template>
         </el-table-column>
         <el-table-column prop="desc" label="描述" min-width="200" show-overflow-tooltip />
@@ -159,7 +197,7 @@
 <script setup>
 import { ref, onMounted, computed, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, ArrowDown } from '@element-plus/icons-vue'
+import { Plus, ArrowDown, Search } from '@element-plus/icons-vue'
 import { consumerApi, consumerGroupApi } from '../utils/api'
 import { formatTimestamp, getDialogWidth } from '../utils/format'
 import { isPluginEnabled, getPluginName, PLUGIN_NAMES, getPluginsByResourceType } from '../utils/plugin'
@@ -194,6 +232,9 @@ const pluginDialogVisible = ref(false)
 const currentConsumerId = ref('')
 const currentPluginType = ref('')
 const currentConsumerPlugins = ref({})
+
+// 过滤条件
+const filterLabel = ref('')
 
 // 获取可用于 consumer 类型的插件列表
 const availablePlugins = computed(() => {
@@ -259,12 +300,17 @@ const getGroupName = (groupId) => {
 const loadData = async () => {
   loading.value = true
   try {
-    const response = await consumerApi.list({
+    const params = {
       page: pagination.value.page,
       page_size: pagination.value.pageSize
-    })
+    }
+    if (filterLabel.value) {
+      params.label = filterLabel.value
+    }
+    
+    const response = await consumerApi.list(params)
     const data = response.data
-    if (data.list) {
+    if (data.list && data.list.length > 0) {
       consumerList.value = data.list.map(item => {
         const consumer = {
           ...item.value,
@@ -296,6 +342,19 @@ const handleSizeChange = (size) => {
 
 const handlePageChange = (page) => {
   pagination.value.page = page
+  loadData()
+}
+
+// 处理过滤
+const handleFilter = () => {
+  pagination.value.page = 1
+  loadData()
+}
+
+// 重置过滤
+const handleResetFilter = () => {
+  filterLabel.value = ''
+  pagination.value.page = 1
   loadData()
 }
 
@@ -452,6 +511,14 @@ onMounted(() => {
   -webkit-overflow-scrolling: touch;
 }
 
+.filter-wrapper {
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 .pagination-wrapper {
   margin-top: 20px;
   display: flex;
@@ -481,6 +548,21 @@ onMounted(() => {
 
   .create-btn .btn-text {
     display: none;
+  }
+
+  .filter-wrapper {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-wrapper .el-input {
+    width: 100% !important;
+    margin-left: 0 !important;
+  }
+
+  .filter-wrapper .el-button {
+    width: 100%;
+    margin-left: 0 !important;
   }
 
   .table-wrapper {

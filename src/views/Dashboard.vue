@@ -1,7 +1,7 @@
 <template>
   <div class="dashboard-page">
     <!-- 统计卡片 -->
-    <el-row :gutter="20" style="margin-bottom: 20px;">
+    <el-row :gutter="20" class="stats-row">
       <el-col :xs="24" :sm="12" :md="6">
         <el-card class="stat-card" shadow="hover">
           <div class="stat-content">
@@ -104,16 +104,23 @@ onMounted(() => {
 <style scoped>
 .dashboard-page {
   width: 100%;
+  padding: 0;
+}
+
+.stats-row {
+  margin-bottom: 20px;
 }
 
 .stat-card {
   margin-bottom: 0;
+  height: 100%;
 }
 
 .stat-content {
   display: flex;
   align-items: center;
   gap: 16px;
+  padding: 4px 0;
 }
 
 .stat-icon {
@@ -131,6 +138,7 @@ onMounted(() => {
 .stat-info {
   flex: 1;
   text-align: right;
+  min-width: 0;
 }
 
 .stat-value {
@@ -139,15 +147,38 @@ onMounted(() => {
   color: #303133;
   line-height: 1;
   margin-bottom: 8px;
+  word-break: break-all;
 }
 
 .stat-label {
   font-size: 14px;
   color: #909399;
+  white-space: nowrap;
 }
 
 /* 移动端适配 */
 @media (max-width: 768px) {
+  .dashboard-page {
+    padding: 0;
+  }
+
+  .stats-row {
+    margin-bottom: 16px;
+  }
+
+  .stats-row :deep(.el-col) {
+    margin-bottom: 12px;
+  }
+
+  .stat-card {
+    margin-bottom: 0;
+  }
+
+  .stat-content {
+    gap: 12px;
+    padding: 8px 0;
+  }
+
   .stat-icon {
     width: 48px;
     height: 48px;
@@ -156,26 +187,55 @@ onMounted(() => {
 
   .stat-value {
     font-size: 24px;
+    margin-bottom: 6px;
   }
 
   .stat-label {
     font-size: 12px;
   }
 
-  .stat-content {
-    gap: 12px;
+  .stat-info {
+    text-align: left;
   }
 }
 
 @media (max-width: 480px) {
+  .stats-row {
+    margin-bottom: 12px;
+  }
+
+  .stats-row :deep(.el-col) {
+    margin-bottom: 10px;
+  }
+
+  .stats-row :deep(.el-row) {
+    margin-left: -8px !important;
+    margin-right: -8px !important;
+  }
+
+  .stats-row :deep(.el-col) {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+
+  .stat-content {
+    gap: 10px;
+    padding: 12px 0;
+  }
+
   .stat-icon {
-    width: 40px;
-    height: 40px;
-    font-size: 20px;
+    width: 44px;
+    height: 44px;
+    font-size: 22px;
   }
 
   .stat-value {
-    font-size: 20px;
+    font-size: 22px;
+    margin-bottom: 4px;
+  }
+
+  .stat-label {
+    font-size: 11px;
   }
 }
 </style>

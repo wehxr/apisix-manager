@@ -11,6 +11,28 @@
         </div>
       </template>
 
+      <!-- 搜索过滤 -->
+      <div class="filter-wrapper">
+        <el-input
+          v-model="filterLabel"
+          placeholder="搜索标签"
+          clearable
+          style="width: 200px;"
+          @clear="handleFilter"
+          @keyup.enter="handleFilter"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+        <el-button type="primary" @click="handleFilter" style="margin-left: 12px;">
+          搜索
+        </el-button>
+        <el-button @click="handleResetFilter" v-if="filterLabel">
+          重置
+        </el-button>
+      </div>
+
       <div class="table-wrapper">
         <el-table :data="sslList" v-loading="loading" style="width: 100%">
         <el-table-column prop="id" label="ID" width="150" />
@@ -49,6 +71,21 @@
               </el-tag>
               <span v-if="!row.ssl_protocols || row.ssl_protocols.length === 0" style="color: #909399">-</span>
             </div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="labels" label="标签" min-width="200">
+          <template #default="{ row }">
+            <div v-if="row.labels && Object.keys(row.labels).length > 0" style="display: flex; flex-wrap: wrap; gap: 4px;">
+              <el-tag
+                v-for="(value, key) in row.labels"
+                :key="key"
+                size="small"
+                type="info"
+              >
+                {{ key }}:{{ value }}
+              </el-tag>
+            </div>
+            <span v-else style="color: #909399">-</span>
           </template>
         </el-table-column>
         <el-table-column prop="desc" label="描述" min-width="150" show-overflow-tooltip />
@@ -333,7 +370,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Delete, Document, Key } from '@element-plus/icons-vue'
+import { Plus, Delete, Document, Key, Search } from '@element-plus/icons-vue'
 import { sslApi } from '../utils/api'
 import { formatTimestamp, getDialogWidth } from '../utils/format'
 import LabelsInput from '../components/LabelsInput.vue'
@@ -361,6 +398,9 @@ const dialogTitle = ref('添加证书')
 const formRef = ref(null)
 const sniInput = ref('')
 const isEdit = ref(false)
+
+// 过滤条件
+const filterLabel = ref('')
 
 // 分页配置
 const pagination = ref({
@@ -417,12 +457,16 @@ const removeCert = (index) => {
 const loadData = async () => {
   loading.value = true
   try {
-    const response = await sslApi.list({
+    const params = {
       page: pagination.value.page,
       page_size: pagination.value.pageSize
-    })
+    }
+    if (filterLabel.value) {
+      params.label = filterLabel.value
+    }
+    const response = await sslApi.list(params)
     const data = response.data
-    if (data.list) {
+    if (data.list && data.list.length > 0) {
       sslList.value = data.list.map(item => ({
         ...item.value,
         id: item.value.id || item.key,
@@ -449,6 +493,19 @@ const handleSizeChange = (size) => {
 
 const handlePageChange = (page) => {
   pagination.value.page = page
+  loadData()
+}
+
+// 过滤
+const handleFilter = () => {
+  pagination.value.page = 1
+  loadData()
+}
+
+// 重置过滤
+const handleResetFilter = () => {
+  filterLabel.value = ''
+  pagination.value.page = 1
   loadData()
 }
 
@@ -628,6 +685,14 @@ onMounted(() => {
 <style scoped>
 .ssl-page {
   width: 100%;
+}
+
+.filter-wrapper {
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .card-header {
@@ -817,6 +882,21 @@ onMounted(() => {
 
   .create-btn .btn-text {
     display: none;
+  }
+
+  .filter-wrapper {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-wrapper .el-input {
+    width: 100% !important;
+    margin-left: 0 !important;
+  }
+
+  .filter-wrapper .el-button {
+    width: 100%;
+    margin-left: 0 !important;
   }
 
   .table-wrapper {

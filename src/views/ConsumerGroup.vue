@@ -10,11 +10,61 @@
           </el-button>
         </div>
       </template>
+
+      <!-- 搜索过滤 -->
+      <div class="filter-wrapper">
+        <el-input
+          v-model="filterName"
+          placeholder="搜索名称"
+          clearable
+          style="width: 200px;"
+          @clear="handleFilter"
+          @keyup.enter="handleFilter"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+        <el-input
+          v-model="filterLabel"
+          placeholder="搜索标签"
+          clearable
+          style="width: 200px; margin-left: 12px;"
+          @clear="handleFilter"
+          @keyup.enter="handleFilter"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+        <el-button type="primary" @click="handleFilter" style="margin-left: 12px;">
+          搜索
+        </el-button>
+        <el-button @click="handleResetFilter" v-if="filterName || filterLabel">
+          重置
+        </el-button>
+      </div>
+
       <div class="table-wrapper">
         <el-table :data="groupList" v-loading="loading" style="width: 100%">
         <el-table-column prop="name" label="名称" width="200">
           <template #default="{ row }">
             <span>{{ row.name || '-' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="labels" label="标签" min-width="200">
+          <template #default="{ row }">
+            <div v-if="row.labels && Object.keys(row.labels).length > 0" style="display: flex; flex-wrap: wrap; gap: 4px;">
+              <el-tag
+                v-for="(value, key) in row.labels"
+                :key="key"
+                size="small"
+                type="info"
+              >
+                {{ key }}:{{ value }}
+              </el-tag>
+            </div>
+            <span v-else style="color: #909399">-</span>
           </template>
         </el-table-column>
         <el-table-column prop="desc" label="描述" min-width="200" show-overflow-tooltip />
@@ -91,7 +141,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Search } from '@element-plus/icons-vue'
 import { consumerGroupApi } from '../utils/api'
 import { formatTimestamp, getDialogWidth } from '../utils/format'
 import { generateId } from '../utils/id'
@@ -120,6 +170,10 @@ const dialogTitle = ref('创建消费者组')
 const formRef = ref(null)
 const isEdit = ref(false)
 
+// 过滤条件
+const filterName = ref('')
+const filterLabel = ref('')
+
 // 分页配置
 const pagination = ref({
   page: 1,
@@ -142,12 +196,20 @@ const rules = {
 const loadData = async () => {
   loading.value = true
   try {
-    const response = await consumerGroupApi.list({
+    const params = {
       page: pagination.value.page,
       page_size: pagination.value.pageSize
-    })
+    }
+    if (filterName.value) {
+      params.name = filterName.value
+    }
+    if (filterLabel.value) {
+      params.label = filterLabel.value
+    }
+    
+    const response = await consumerGroupApi.list(params)
     const data = response.data
-    if (data.list) {
+    if (data.list && data.list.length > 0) {
       groupList.value = data.list.map(item => {
         const value = item.value || {}
         let id = value.id
@@ -182,6 +244,20 @@ const handleSizeChange = (size) => {
 
 const handlePageChange = (page) => {
   pagination.value.page = page
+  loadData()
+}
+
+// 处理过滤
+const handleFilter = () => {
+  pagination.value.page = 1
+  loadData()
+}
+
+// 重置过滤
+const handleResetFilter = () => {
+  filterName.value = ''
+  filterLabel.value = ''
+  pagination.value.page = 1
   loadData()
 }
 
@@ -296,6 +372,14 @@ onMounted(() => {
   -webkit-overflow-scrolling: touch;
 }
 
+.filter-wrapper {
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 .pagination-wrapper {
   margin-top: 20px;
   display: flex;
@@ -319,6 +403,21 @@ onMounted(() => {
 
   .create-btn .btn-text {
     display: none;
+  }
+
+  .filter-wrapper {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-wrapper .el-input {
+    width: 100% !important;
+    margin-left: 0 !important;
+  }
+
+  .filter-wrapper .el-button {
+    width: 100%;
+    margin-left: 0 !important;
   }
 
   .table-wrapper {
