@@ -8,6 +8,7 @@
     <component
       v-if="currentPluginComponent"
       :is="currentPluginComponent"
+      :key="`${resourceId}-${currentPluginType}`"
       :model-value="(currentPluginConfig.plugins || {})[currentPluginType] ?? {}"
       :resource-type="resourceType"
       @update:model-value="handlePluginConfigUpdate"
@@ -45,6 +46,9 @@ import PluginFormGzip from '@/components/PluginForm/PluginFormGzip.vue'
 import PluginFormProxyRewrite from '@/components/PluginForm/PluginFormProxyRewrite.vue'
 import PluginFormFileLogger from '@/components/PluginForm/PluginFormFileLogger.vue'
 import PluginFormLdapAuth from '@/components/PluginForm/PluginFormLdapAuth.vue'
+import PluginFormProxyMirror from '@/components/PluginForm/PluginFormProxyMirror.vue'
+import PluginFormEcho from '@/components/PluginForm/PluginFormEcho.vue'
+import PluginFormRefererRestriction from '@/components/PluginForm/PluginFormRefererRestriction.vue'
 
 const componentMap = {
   'PluginFormRequestId': PluginFormRequestId,
@@ -64,7 +68,10 @@ const componentMap = {
   'PluginFormGzip': PluginFormGzip,
   'PluginFormProxyRewrite': PluginFormProxyRewrite,
   'PluginFormFileLogger': PluginFormFileLogger,
-  'PluginFormLdapAuth': PluginFormLdapAuth
+  'PluginFormLdapAuth': PluginFormLdapAuth,
+  'PluginFormProxyMirror': PluginFormProxyMirror,
+  'PluginFormEcho': PluginFormEcho,
+  'PluginFormRefererRestriction': PluginFormRefererRestriction
 }
 
 const kebabToPascal = (str) =>

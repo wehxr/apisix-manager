@@ -20,14 +20,14 @@
       <el-form-item label="允许的源">
         <el-input
           :model-value="originsInput"
-          @update:model-value="handleOriginsInput"
-          @blur="handleBlur"
+          @update:model-value="(v) => originsInput.value = v"
+          @blur="commit"
           placeholder="多个源用逗号分隔，如: https://example.com, https://*.example.com"
         />
-        <div class="form-tip">留空表示允许所有源（使用 *），多个源用逗号分隔</div>
+        <div class="form-tip">默认 * 表示允许所有源，多个源用逗号分隔</div>
       </el-form-item>
       <el-form-item label="允许的方法">
-        <el-checkbox-group :model-value="methodsValue" @update:model-value="handleMethodsChange">
+        <el-checkbox-group :model-value="methodsValue" @update:model-value="(v) => { methodsValue.value = v; commit() }">
           <el-checkbox label="GET">GET</el-checkbox>
           <el-checkbox label="POST">POST</el-checkbox>
           <el-checkbox label="PUT">PUT</el-checkbox>
@@ -43,8 +43,8 @@
       <el-form-item label="允许的请求头">
         <el-input
           :model-value="allowHeadersInput"
-          @update:model-value="handleAllowHeadersInput"
-          @blur="handleBlur"
+          @update:model-value="(v) => allowHeadersInput.value = v"
+          @blur="commit"
           placeholder="多个请求头用逗号分隔，如: Content-Type, Authorization"
         />
         <div class="form-tip">默认值：Content-Type, Authorization, X-Requested-With, X-CSRF-Token，留空则使用默认值，多个请求头用逗号分隔</div>
@@ -52,8 +52,8 @@
       <el-form-item label="暴露的响应头">
         <el-input
           :model-value="exposeHeadersInput"
-          @update:model-value="handleExposeHeadersInput"
-          @blur="handleBlur"
+          @update:model-value="(v) => exposeHeadersInput.value = v"
+          @blur="commit"
           placeholder="多个响应头用逗号分隔，如: Content-Length, X-Custom-Header"
         />
         <div class="form-tip">可选，多个响应头用逗号分隔，留空则不设置</div>
@@ -61,8 +61,8 @@
       <el-form-item label="缓存时间">
         <el-input-number
           :model-value="maxAgeValue"
-          @update:model-value="handleMaxAgeChange"
-          @change="handleBlur"
+          @update:model-value="(v) => maxAgeValue.value = v"
+          @change="commit"
           :min="-1"
           :max="31536000"
           style="width: 100%"
@@ -70,7 +70,7 @@
         <div class="form-tip">单位：秒，浏览器缓存 CORS 结果的最大时间，-1 表示不缓存，默认 1728000 秒（20天）</div>
       </el-form-item>
       <el-form-item label="允许凭据">
-        <el-switch :model-value="allowCredentialValue" @update:model-value="handleAllowCredentialChange" @change="handleBlur" />
+        <el-switch :model-value="allowCredentialValue" @update:model-value="handleAllowCredentialChange" />
         <div class="form-tip">是否允许跨域请求携带凭据（如 Cookie），开启后不能在其他属性中使用 *</div>
       </el-form-item>
       <el-form-item label="允许的源（正则表达式）">
@@ -84,8 +84,8 @@
               <span class="regex-index">{{ idx + 1 }}</span>
               <el-input
                 :model-value="regex"
-                @update:model-value="(v) => updateRegex(idx, v)"
-                @blur="handleBlur"
+                @update:model-value="(v) => allowOriginsByRegexList.value[idx] = v"
+                @blur="commit"
                 placeholder="如: .*\.test\.com$"
                 class="regex-input"
                 clearable
@@ -102,7 +102,7 @@
           <div v-else class="regex-empty">
             暂无正则，点击下方按钮添加
           </div>
-          <el-button type="primary" link :icon="Plus" class="regex-add-btn" @click="addRegex">
+          <el-button type="primary" link :icon="Plus" class="regex-add-btn" @click="allowOriginsByRegexList.value.push('')">
             添加正则表达式
           </el-button>
         </div>
@@ -113,105 +113,79 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, computed } from 'vue'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import { isPluginEnabled, setPluginEnabled } from '@/utils/plugin'
 import { usePluginConfig } from '@/composables/usePluginConfig'
+
+const DEFAULT_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD']
+const DEFAULT_HEADERS = 'Content-Type, Authorization, X-Requested-With, X-CSRF-Token'
+const DEFAULT_MAX_AGE = 1728000
+
+const toStr = (v) => (Array.isArray(v) ? v.join(', ') : v || '')
+
+function getInitialFromConfig(config) {
+  const c = config || {}
+  const raw = c.allow_origins
+  const origins = (raw && raw !== '*') ? toStr(raw) : '*'
+  const rawHeaders = c.allow_headers
+  const allowHeaders = (rawHeaders && rawHeaders !== '*') ? toStr(rawHeaders) : DEFAULT_HEADERS
+  let methods = DEFAULT_METHODS
+  const m = c.allow_methods
+  if (m) {
+    if (typeof m === 'string') methods = m === '*' ? DEFAULT_METHODS : m.split(',').map((s) => s.trim()).filter(Boolean)
+    else if (Array.isArray(m)) methods = m
+  }
+  return {
+    origins,
+    methods,
+    allowHeaders,
+    exposeHeaders: toStr(c.expose_headers),
+    maxAge: c.max_age !== undefined ? c.max_age : DEFAULT_MAX_AGE,
+    allowCredential: !!c.allow_credential,
+    allowOriginsByRegex: [...(c.allow_origins_by_regex || [])]
+  }
+}
 
 const props = defineProps({
   modelValue: { type: Object, default: () => ({}) },
   resourceType: { type: String, default: '' }
 })
-
 const emit = defineEmits(['update:modelValue'])
 const { config, updateConfig } = usePluginConfig(props, emit)
-
 const enabled = computed(() => isPluginEnabled(config.value))
 
-// 计算各个字段
-const origins = computed(() => {
-  if (!enabled.value) return ''
-  if (config.value.allow_origins && config.value.allow_origins !== '*') {
-    return Array.isArray(config.value.allow_origins)
-      ? config.value.allow_origins.join(', ')
-      : config.value.allow_origins
-  }
-  return ''
-})
-
-const methods = computed(() => {
-  if (!enabled.value) return ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD']
-  if (config.value.allow_methods) {
-    if (typeof config.value.allow_methods === 'string') {
-      if (config.value.allow_methods === '*') return ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD']
-      return config.value.allow_methods.split(',').map(s => s.trim()).filter(s => s)
-    }
-    if (Array.isArray(config.value.allow_methods)) return config.value.allow_methods
-  }
-  return ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD']
-})
-
-const allowHeaders = computed(() => {
-  if (!enabled.value) return 'Content-Type, Authorization, X-Requested-With, X-CSRF-Token'
-  if (config.value.allow_headers) {
-    if (config.value.allow_headers === '*') return 'Content-Type, Authorization, X-Requested-With, X-CSRF-Token'
-    return Array.isArray(config.value.allow_headers)
-      ? config.value.allow_headers.join(', ')
-      : config.value.allow_headers
-  }
-  return 'Content-Type, Authorization, X-Requested-With, X-CSRF-Token'
-})
-
-const exposeHeaders = computed(() => {
-  if (!enabled.value) return ''
-  if (config.value.expose_headers) {
-    return Array.isArray(config.value.expose_headers)
-      ? config.value.expose_headers.join(', ')
-      : config.value.expose_headers
-  }
-  return ''
-})
-
-const maxAge = computed(() => config.value.max_age !== undefined ? config.value.max_age : 1728000)
-const allowCredential = computed(() => config.value.allow_credential !== undefined ? config.value.allow_credential : false)
-const allowOriginsByRegex = computed(() => {
-  if (!enabled.value) return []
-  return config.value.allow_origins_by_regex || []
-})
-
-// 内部状态
-const originsInput = ref(origins.value)
-const methodsValue = ref(methods.value)
-const allowHeadersInput = ref(allowHeaders.value)
-const exposeHeadersInput = ref(exposeHeaders.value)
-const maxAgeValue = ref(maxAge.value)
-const allowCredentialValue = ref(allowCredential.value)
-const allowOriginsByRegexList = ref([...allowOriginsByRegex.value])
-
-// 监听 props 变化，更新内部状态
-watch([enabled, origins, methods, allowHeaders, exposeHeaders, maxAge, allowCredential, allowOriginsByRegex],
-  ([newEnabled, newOrigins, newMethods, newAllowHeaders, newExposeHeaders, newMaxAge, newAllowCredential, newAllowOriginsByRegex]) => {
-    localEnable.value = newEnabled
-    originsInput.value = newOrigins
-    methodsValue.value = newMethods
-    allowHeadersInput.value = newAllowHeaders
-    exposeHeadersInput.value = newExposeHeaders
-    maxAgeValue.value = newMaxAge
-    allowCredentialValue.value = newAllowCredential
-    allowOriginsByRegexList.value = [...newAllowOriginsByRegex]
-  }, { immediate: true })
+const init = getInitialFromConfig(config.value)
+const originsInput = ref(init.origins)
+const methodsValue = ref(init.methods)
+const allowHeadersInput = ref(init.allowHeaders)
+const exposeHeadersInput = ref(init.exposeHeaders)
+const maxAgeValue = ref(init.maxAge)
+const allowCredentialValue = ref(init.allowCredential)
+const allowOriginsByRegexList = ref(init.allowOriginsByRegex)
 
 function buildCorsConfig() {
-  const cfg = {}
-  if (originsInput.value?.trim()) cfg.allow_origins = originsInput.value.trim()
+  const o = originsInput.value?.trim()
+  const cfg = {
+    allow_methods: methodsValue.value?.length ? methodsValue.value.join(',') : DEFAULT_METHODS.join(', '),
+    allow_headers: allowHeadersInput.value?.trim() || DEFAULT_HEADERS,
+    max_age: maxAgeValue.value ?? DEFAULT_MAX_AGE,
+    allow_credential: allowCredentialValue.value
+  }
+  if (o) cfg.allow_origins = o
   else if (!allowCredentialValue.value) cfg.allow_origins = '*'
-  cfg.allow_methods = methodsValue.value?.length ? methodsValue.value.join(',') : 'GET, POST, PUT, DELETE, OPTIONS, HEAD'
-  cfg.allow_headers = allowHeadersInput.value?.trim() || 'Content-Type, Authorization, X-Requested-With, X-CSRF-Token'
-  if (exposeHeadersInput.value?.trim()) cfg.expose_headers = exposeHeadersInput.value.trim()
-  cfg.max_age = maxAgeValue.value !== undefined ? maxAgeValue.value : 1728000
-  cfg.allow_credential = allowCredentialValue.value
-  if (allowOriginsByRegexList.value?.length) cfg.allow_origins_by_regex = allowOriginsByRegexList.value.filter((r) => r?.trim())
+  const exp = exposeHeadersInput.value?.trim()
+  if (exp) cfg.expose_headers = exp
+  const regex = allowOriginsByRegexList.value.filter((r) => r?.trim())
+  if (regex.length) cfg.allow_origins_by_regex = regex
   return cfg
+}
+
+function commit() {
+  if (!enabled.value) return
+  const cfg = buildCorsConfig()
+  setPluginEnabled(cfg, true)
+  updateConfig(cfg)
 }
 
 function handleEnableChange(value) {
@@ -220,49 +194,14 @@ function handleEnableChange(value) {
   updateConfig(cfg)
 }
 
-const handleOriginsInput = (value) => {
-  originsInput.value = value
+function handleAllowCredentialChange(v) {
+  allowCredentialValue.value = v
+  commit()
 }
 
-const handleMethodsChange = (value) => {
-  methodsValue.value = value
-  handleBlur()
-}
-
-const handleAllowHeadersInput = (value) => {
-  allowHeadersInput.value = value
-}
-
-const handleExposeHeadersInput = (value) => {
-  exposeHeadersInput.value = value
-}
-
-const handleMaxAgeChange = (value) => {
-  maxAgeValue.value = value
-}
-
-const handleAllowCredentialChange = (value) => {
-  allowCredentialValue.value = value
-}
-
-const addRegex = () => {
-  allowOriginsByRegexList.value.push('')
-}
-
-const updateRegex = (idx, value) => {
-  allowOriginsByRegexList.value[idx] = value
-}
-
-const removeRegex = (idx) => {
+function removeRegex(idx) {
   allowOriginsByRegexList.value.splice(idx, 1)
-  handleBlur()
-}
-
-const handleBlur = () => {
-  if (!localEnable.value) return
-  const cfg = buildCorsConfig()
-  setPluginEnabled(cfg, true)
-  updateConfig(cfg)
+  commit()
 }
 </script>
 
@@ -295,14 +234,8 @@ const handleBlur = () => {
   border-bottom: 1px dashed var(--el-border-color-lighter);
 }
 
-.regex-item:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
-.regex-item:first-child {
-  padding-top: 0;
-}
+.regex-item:first-child { padding-top: 0; }
+.regex-item:last-child { border-bottom: none; padding-bottom: 0; }
 
 .regex-index {
   flex-shrink: 0;

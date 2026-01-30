@@ -35,7 +35,7 @@
 
       <div class="table-wrapper">
         <el-table :data="consumerList" v-loading="loading" style="width: 100%">
-        <el-table-column prop="username" label="用户名"/>
+        <el-table-column prop="username" label="用户名" min-width="150" />
         <el-table-column prop="group_id" label="消费者组" width="150">
           <template #default="{ row }">
             <el-tag v-if="row.group_id" size="small">{{ getGroupName(row.group_id) }}</el-tag>
@@ -86,22 +86,14 @@
           <template #default="{ row }">
             <div class="action-buttons">
               <el-button size="small" @click="handleEdit(row)">编辑</el-button>
-              <el-dropdown @command="(command) => handlePluginCommand(row, command)" trigger="click">
+              <GroupedDropdown
+                :grouped="pluginGrouped"
+                @command="(command) => handlePluginCommand(row, command)"
+              >
                 <el-button size="small">
                   插件<el-icon class="el-icon--right"><arrow-down /></el-icon>
                 </el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item 
-                      v-for="pluginKey in availablePlugins" 
-                      :key="pluginKey" 
-                      :command="pluginKey"
-                    >
-                      {{ PLUGIN_NAMES[pluginKey] }}
-                    </el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
+              </GroupedDropdown>
               <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
             </div>
           </template>
@@ -199,9 +191,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, ArrowDown, Search } from '@element-plus/icons-vue'
 import { consumerApi, consumerGroupApi } from '../utils/api'
 import { formatTimestamp, getDialogWidth } from '../utils/format'
-import { isPluginEnabled, getPluginName, PLUGIN_NAMES, getPluginsByResourceType } from '../utils/plugin'
+import { isPluginEnabled, getPluginName, getPluginsGroupedByResourceType } from '../utils/plugin'
 import LabelsInput from '../components/LabelsInput.vue'
 import PluginDialog from '../components/PluginDialog.vue'
+import GroupedDropdown from '../components/GroupedDropdown.vue'
 
 // 响应式分页布局
 const paginationLayout = computed(() => {
@@ -231,13 +224,10 @@ const pluginDialogVisible = ref(false)
 const currentConsumerId = ref('')
 const currentPluginType = ref('')
 
+const pluginGrouped = computed(() => getPluginsGroupedByResourceType('consumer'))
+
 // 过滤条件
 const filterLabel = ref('')
-
-// 获取可用于 consumer 类型的插件列表
-const availablePlugins = computed(() => {
-  return getPluginsByResourceType('consumer')
-})
 
 // 分页配置
 const pagination = ref({

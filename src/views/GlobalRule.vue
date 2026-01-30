@@ -4,23 +4,14 @@
       <template #header>
         <div class="card-header">
           <span>全局规则</span>
-          <el-dropdown @command="handleAddPlugin" trigger="click">
+          <GroupedDropdown
+            :grouped="pluginGrouped"
+            @command="handleAddPlugin"
+          >
             <el-button type="primary">
-              添加插件<el-icon class="el-icon--right"><arrow-down /></el-icon>
+              插件<el-icon class="el-icon--right"><arrow-down /></el-icon>
             </el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item 
-                  v-for="pluginKey in availablePlugins" 
-                  :key="pluginKey" 
-                  :command="pluginKey"
-                  :disabled="isPluginAdded(pluginKey)"
-                >
-                  {{ PLUGIN_NAMES[pluginKey] }}
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
+          </GroupedDropdown>
         </div>
       </template>
 
@@ -72,20 +63,16 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { globalRuleApi } from '@/utils/api'
 import { formatTimestamp } from '@/utils/format'
-import { isPluginEnabled, getPluginName, PLUGIN_NAMES, getPluginsByResourceType } from '@/utils/plugin'
+import { isPluginEnabled, getPluginName, getPluginsGroupedByResourceType } from '@/utils/plugin'
 import { generateId } from '@/utils/id'
 import PluginDialog from '@/components/PluginDialog.vue'
+import GroupedDropdown from '@/components/GroupedDropdown.vue'
 
 const loading = ref(false)
 const globalRuleList = ref([])
 const pluginDialogVisible = ref(false)
 const currentGlobalRuleId = ref('')
 const currentPluginType = ref('')
-
-// 获取可用于 global_rule 的插件列表
-const availablePlugins = computed(() => {
-  return getPluginsByResourceType('global_rule')
-})
 
 // 将全局规则列表转换为插件列表（每行一个插件）
 const pluginList = computed(() => {
@@ -109,10 +96,7 @@ const pluginList = computed(() => {
   return plugins
 })
 
-// 检查插件是否已添加
-const isPluginAdded = (pluginType) => {
-  return pluginList.value.some(plugin => plugin.type === pluginType)
-}
+const pluginGrouped = computed(() => getPluginsGroupedByResourceType('global_rule'))
 
 const loadData = async () => {
   loading.value = true
@@ -159,16 +143,10 @@ const getOrCreateGlobalRuleId = async () => {
   }
 }
 
-// 处理添加插件
+// 处理添加/配置插件（已存在则直接打开配置页）
 const handleAddPlugin = async (pluginType) => {
-  if (isPluginAdded(pluginType)) {
-    ElMessage.warning('该插件已存在')
-    return
-  }
-  
   try {
     const globalRuleId = await getOrCreateGlobalRuleId()
-    
     if (pluginDialogVisible.value) {
       pluginDialogVisible.value = false
       await nextTick()
@@ -178,7 +156,8 @@ const handleAddPlugin = async (pluginType) => {
     await nextTick()
     pluginDialogVisible.value = true
   } catch (error) {
-    ElMessage.error('添加插件失败')
+    console.error('打开插件配置失败:', error)
+    ElMessage.error('无法打开配置，请检查网络或稍后重试')
   }
 }
 

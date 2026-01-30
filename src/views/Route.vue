@@ -172,22 +172,14 @@
           <template #default="{ row }">
             <div class="action-buttons">
               <el-button size="small" @click="handleEdit(row)">编辑</el-button>
-              <el-dropdown @command="(command) => handlePluginCommand(row, command)" trigger="click">
+              <GroupedDropdown
+                :grouped="pluginGrouped"
+                @command="(command) => handlePluginCommand(row, command)"
+              >
                 <el-button size="small">
                   插件<el-icon class="el-icon--right"><arrow-down /></el-icon>
                 </el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item 
-                      v-for="pluginKey in availablePlugins" 
-                      :key="pluginKey" 
-                      :command="pluginKey"
-                    >
-                      {{ PLUGIN_NAMES[pluginKey] }}
-                    </el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
+              </GroupedDropdown>
               <el-dropdown @command="(command) => handleActionCommand(row, command)" trigger="click">
                 <el-button size="small">
                   更多<el-icon class="el-icon--right"><arrow-down /></el-icon>
@@ -257,10 +249,11 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, ArrowDown, Search } from '@element-plus/icons-vue'
 import { routeApi, upstreamApi, pluginConfigApi } from '@/utils/api'
 import { formatTimestamp, getDialogWidth } from '@/utils/format'
-import { isPluginEnabled, getPluginName, PLUGIN_NAMES, getPluginsByResourceType } from '@/utils/plugin'
+import { isPluginEnabled, getPluginName, getPluginsGroupedByResourceType } from '@/utils/plugin'
 import { generateId } from '@/utils/id'
 import RouteForm from '@/components/RouteForm.vue'
 import PluginDialog from '@/components/PluginDialog.vue'
+import GroupedDropdown from '@/components/GroupedDropdown.vue'
 
 // 响应式分页布局
 const paginationLayout = computed(() => {
@@ -325,12 +318,7 @@ const getUpstreamName = (upstreamId) => {
   return upstream?.name || ''
 }
 
-// 获取可用于 route 类型的插件列表
-const availablePlugins = computed(() => {
-  return getPluginsByResourceType('route')
-})
-
-
+const pluginGrouped = computed(() => getPluginsGroupedByResourceType('route'))
 
 // 处理表单更新
 const handleFormUpdate = (value) => {

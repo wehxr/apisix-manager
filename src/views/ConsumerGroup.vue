@@ -5,7 +5,9 @@
         <div class="card-header">
           <span>消费者组管理</span>
           <el-button type="primary" @click="handleAdd" class="create-btn">
-            <el-icon><Plus /></el-icon>
+            <el-icon>
+              <Plus />
+            </el-icon>
             <span class="btn-text">创建消费者组</span>
           </el-button>
         </div>
@@ -13,28 +15,20 @@
 
       <!-- 搜索过滤 -->
       <div class="filter-wrapper">
-        <el-input
-          v-model="filterName"
-          placeholder="搜索名称"
-          clearable
-          style="width: 200px;"
-          @clear="handleFilter"
-          @keyup.enter="handleFilter"
-        >
+        <el-input v-model="filterName" placeholder="搜索名称" clearable style="width: 200px;" @clear="handleFilter"
+          @keyup.enter="handleFilter">
           <template #prefix>
-            <el-icon><Search /></el-icon>
+            <el-icon>
+              <Search />
+            </el-icon>
           </template>
         </el-input>
-        <el-input
-          v-model="filterLabel"
-          placeholder="搜索标签"
-          clearable
-          style="width: 200px; margin-left: 12px;"
-          @clear="handleFilter"
-          @keyup.enter="handleFilter"
-        >
+        <el-input v-model="filterLabel" placeholder="搜索标签" clearable style="width: 200px; margin-left: 12px;"
+          @clear="handleFilter" @keyup.enter="handleFilter">
           <template #prefix>
-            <el-icon><Search /></el-icon>
+            <el-icon>
+              <Search />
+            </el-icon>
           </template>
         </el-input>
         <el-button type="primary" @click="handleFilter" style="margin-left: 12px;">
@@ -47,118 +41,78 @@
 
       <div class="table-wrapper">
         <el-table :data="groupList" v-loading="loading" style="width: 100%">
-        <el-table-column prop="name" label="名称" width="200">
-          <template #default="{ row }">
-            <span>{{ row.name || '-' }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="plugins" label="插件" min-width="250">
-          <template #default="{ row }">
-            <div style="display: flex; flex-wrap: wrap; gap: 4px;">
-              <template v-if="row.plugins" v-for="(plugin, key) in row.plugins" :key="key">
-                <el-tag
-                  v-if="isPluginEnabled(plugin)"
-                  size="small"
-                >
-                  {{ getPluginName(key) }}
-                </el-tag>
-              </template>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column prop="labels" label="标签" min-width="200">
-          <template #default="{ row }">
-            <div v-if="row.labels && Object.keys(row.labels).length > 0" style="display: flex; flex-wrap: wrap; gap: 4px;">
-              <el-tag
-                v-for="(value, key) in row.labels"
-                :key="key"
-                size="small"
-                type="info"
-              >
-                {{ key }}:{{ value }}
-              </el-tag>
-            </div>
-            <span v-else style="color: #909399">-</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="desc" label="描述" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="create_time" label="创建时间" width="180">
-          <template #default="{ row }">
-            <span>{{ formatTimestamp(row.create_time) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="update_time" label="更新时间" width="180">
-          <template #default="{ row }">
-            <span>{{ formatTimestamp(row.update_time) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="280" fixed="right" class-name="action-column">
-          <template #default="{ row }">
-            <div class="action-buttons">
-              <el-button size="small" @click="handleEdit(row)">编辑</el-button>
-              <el-dropdown @command="(command) => handlePluginCommand(row, command)" trigger="click">
-                <el-button size="small">
-                  插件<el-icon class="el-icon--right"><arrow-down /></el-icon>
-                </el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item
-                      v-for="pluginKey in availablePlugins"
-                      :key="pluginKey"
-                      :command="pluginKey"
-                    >
-                      {{ PLUGIN_NAMES[pluginKey] }}
-                    </el-dropdown-item>
-                  </el-dropdown-menu>
+          <el-table-column prop="name" label="名称" min-width="150" />
+          <el-table-column prop="plugins" label="插件" min-width="250">
+            <template #default="{ row }">
+              <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                <template v-if="row.plugins" v-for="(plugin, key) in row.plugins" :key="key">
+                  <el-tag v-if="isPluginEnabled(plugin)" size="small">
+                    {{ getPluginName(key) }}
+                  </el-tag>
                 </template>
-              </el-dropdown>
-              <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
-            </div>
-          </template>
-        </el-table-column>
-      </el-table>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column prop="labels" label="标签" min-width="200">
+            <template #default="{ row }">
+              <div v-if="row.labels && Object.keys(row.labels).length > 0"
+                style="display: flex; flex-wrap: wrap; gap: 4px;">
+                <el-tag v-for="(value, key) in row.labels" :key="key" size="small" type="info">
+                  {{ key }}:{{ value }}
+                </el-tag>
+              </div>
+              <span v-else style="color: #909399">-</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="desc" label="描述" min-width="200" show-overflow-tooltip />
+          <el-table-column prop="create_time" label="创建时间" width="180">
+            <template #default="{ row }">
+              <span>{{ formatTimestamp(row.create_time) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="update_time" label="更新时间" width="180">
+            <template #default="{ row }">
+              <span>{{ formatTimestamp(row.update_time) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="280" fixed="right" class-name="action-column">
+            <template #default="{ row }">
+              <div class="action-buttons">
+                <el-button size="small" @click="handleEdit(row)">编辑</el-button>
+                <GroupedDropdown
+                  :grouped="pluginGrouped"
+                  @command="(command) => handlePluginCommand(row, command)"
+                >
+                  <el-button size="small">
+                    插件<el-icon class="el-icon--right"><arrow-down /></el-icon>
+                  </el-button>
+                </GroupedDropdown>
+                <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+              </div>
+            </template>
+          </el-table-column>
+        </el-table>
       </div>
 
       <!-- 分页 -->
       <div class="pagination-wrapper">
-        <el-pagination
-          v-model:current-page="pagination.page"
-          v-model:page-size="pagination.pageSize"
-          :page-sizes="[10, 20, 50, 100]"
-          :total="pagination.total"
-          :layout="paginationLayout"
-          @size-change="handleSizeChange"
-          @current-change="handlePageChange"
-        />
+        <el-pagination v-model:current-page="pagination.page" v-model:page-size="pagination.pageSize"
+          :page-sizes="[10, 20, 50, 100]" :total="pagination.total" :layout="paginationLayout"
+          @size-change="handleSizeChange" @current-change="handlePageChange" />
       </div>
     </el-card>
 
     <!-- 消费者组添加/编辑对话框 -->
-    <el-dialog
-      v-model="dialogVisible"
-      :title="dialogTitle"
-      :width="dialogWidth"
-      @close="resetForm"
-    >
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" :width="dialogWidth" @close="resetForm">
       <el-form :model="form" label-width="120px" ref="formRef" :rules="rules">
         <el-form-item label="名称" prop="name">
-          <el-input
-            v-model="form.name"
-            placeholder="请输入消费者组名称（可选）"
-          />
+          <el-input v-model="form.name" placeholder="请输入消费者组名称（可选）" />
         </el-form-item>
         <el-form-item label="描述" prop="desc">
-          <el-input
-            v-model="form.desc"
-            type="textarea"
-            :rows="3"
-            placeholder="请输入描述信息（可选）"
-          />
+          <el-input v-model="form.desc" type="textarea" :rows="3" placeholder="请输入描述信息（可选）" />
         </el-form-item>
         <el-form-item label="标签" prop="labels">
-          <LabelsInput
-            v-model="form.labels"
-          />
+          <LabelsInput v-model="form.labels" />
           <div class="form-tip">可选，用于标记和分类消费者组</div>
         </el-form-item>
       </el-form>
@@ -169,13 +123,8 @@
     </el-dialog>
 
     <!-- 插件配置对话框 -->
-    <PluginDialog
-      v-model="pluginDialogVisible"
-      resource-type="consumer_group"
-      :resource-id="currentGroupId"
-      :plugin-type="currentPluginType"
-      @saved="handlePluginSaved"
-    />
+    <PluginDialog v-model="pluginDialogVisible" resource-type="consumer_group" :resource-id="currentGroupId"
+      :plugin-type="currentPluginType" @saved="handlePluginSaved" />
   </div>
 </template>
 
@@ -186,9 +135,10 @@ import { Plus, ArrowDown, Search } from '@element-plus/icons-vue'
 import { consumerGroupApi } from '../utils/api'
 import { formatTimestamp, getDialogWidth } from '../utils/format'
 import { generateId } from '../utils/id'
-import { isPluginEnabled, getPluginName, PLUGIN_NAMES, getPluginsByResourceType } from '../utils/plugin'
+import { isPluginEnabled, getPluginName, getPluginsGroupedByResourceType } from '../utils/plugin'
 import LabelsInput from '../components/LabelsInput.vue'
 import PluginDialog from '../components/PluginDialog.vue'
+import GroupedDropdown from '../components/GroupedDropdown.vue'
 
 // 响应式分页布局
 const paginationLayout = computed(() => {
@@ -216,10 +166,7 @@ const pluginDialogVisible = ref(false)
 const currentGroupId = ref('')
 const currentPluginType = ref('')
 
-// 获取可用于 consumer_group 类型的插件列表
-const availablePlugins = computed(() => {
-  return getPluginsByResourceType('consumer_group')
-})
+const pluginGrouped = computed(() => getPluginsGroupedByResourceType('consumer_group'))
 
 // 过滤条件
 const filterName = ref('')
@@ -258,7 +205,7 @@ const loadData = async () => {
     if (filterLabel.value) {
       params.label = filterLabel.value
     }
-    
+
     const response = await consumerGroupApi.list(params)
     const data = response.data
     if (data.list && data.list.length > 0) {
@@ -348,7 +295,7 @@ const handleEdit = async (row) => {
 
 const handleSubmit = async () => {
   if (!formRef.value) return
-  
+
   await formRef.value.validate(async (valid) => {
     if (!valid) return
 
@@ -476,7 +423,7 @@ onMounted(() => {
   font-size: 12px;
   color: #909399;
   margin-top: 5px;
-  display: block; 
+  display: block;
   width: 100%;
 }
 

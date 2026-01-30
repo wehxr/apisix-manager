@@ -3,23 +3,50 @@
 // 导入插件资源配置
 import pluginResourcesConfig from '../config/plugin.json'
 
+// 仅插件项（排除无 name 的键）
+const pluginKeys = Object.keys(pluginResourcesConfig).filter(
+  key => pluginResourcesConfig[key]?.name != null
+)
+
 // 插件名称翻译映射（从 JSON 配置生成）
-export const PLUGIN_NAMES = Object.keys(pluginResourcesConfig).reduce((acc, key) => {
+export const PLUGIN_NAMES = pluginKeys.reduce((acc, key) => {
   acc[key] = pluginResourcesConfig[key].name
   return acc
 }, {})
 
 // 插件与资源的关联定义（从 JSON 配置生成）
-export const PLUGIN_RESOURCE_MAP = Object.keys(pluginResourcesConfig).reduce((acc, key) => {
+export const PLUGIN_RESOURCE_MAP = pluginKeys.reduce((acc, key) => {
   acc[key] = pluginResourcesConfig[key].resources || []
   return acc
 }, {})
 
 // 获取指定资源类型可用的插件列表
 export function getPluginsByResourceType(resourceType) {
-  return Object.keys(PLUGIN_RESOURCE_MAP).filter(pluginKey => 
-    PLUGIN_RESOURCE_MAP[pluginKey].includes(resourceType)
+  return pluginKeys.filter(pluginKey =>
+    (PLUGIN_RESOURCE_MAP[pluginKey] || []).includes(resourceType)
   )
+}
+
+// 按分组返回指定资源类型可用的插件，用于双列下拉；group 直接为中文
+// 返回 [{ groupKey, groupName, plugins: [pluginKey, ...] }, ...]，按首次出现顺序
+export function getPluginsGroupedByResourceType(resourceType) {
+  const available = getPluginsByResourceType(resourceType)
+  const byGroup = {}
+  const order = []
+  available.forEach(pluginKey => {
+    const config = pluginResourcesConfig[pluginKey]
+    const groupName = (config && config.group) ? config.group : '其他'
+    if (!byGroup[groupName]) {
+      order.push(groupName)
+      byGroup[groupName] = []
+    }
+    byGroup[groupName].push(pluginKey)
+  })
+  return order.map(groupKey => ({
+    groupKey,
+    groupName: groupKey,
+    plugins: byGroup[groupKey] || []
+  }))
 }
 
 // 检查插件是否可用于指定资源类型

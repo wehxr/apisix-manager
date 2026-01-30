@@ -21,12 +21,12 @@
       </template>
     </el-alert>
     <el-form-item label="开启插件">
-      <el-switch :model-value="localEnabled" @update:model-value="handleEnableChange" />
+      <el-switch :model-value="enabled" @update:model-value="handleEnableChange" />
     </el-form-item>
-    <template v-if="localEnabled">
+    <template v-if="enabled">
       <el-divider>URI 重写</el-divider>
       <el-form-item label="重写方式">
-        <el-radio-group :model-value="localUriRewriteType" @update:model-value="handleUriRewriteTypeChange">
+        <el-radio-group :model-value="uriRewriteType" @update:model-value="handleUriRewriteTypeChange">
           <el-radio label="uri">URI 路径（简单重写）</el-radio>
           <el-radio label="regex">正则表达式（灵活重写）</el-radio>
           <el-radio label="none">不重写 URI</el-radio>
@@ -37,7 +37,7 @@
         </div>
       </el-form-item>
       
-      <template v-if="localUriRewriteType === 'uri'">
+      <template v-if="uriRewriteType === 'uri'">
         <el-form-item label="URI 路径">
           <el-input
             :model-value="uri"
@@ -57,7 +57,7 @@
         </el-form-item>
       </template>
       
-      <template v-if="localUriRewriteType === 'regex'">
+      <template v-if="uriRewriteType === 'regex'">
         <el-form-item label="正则表达式规则">
           <div class="regex-uri-block">
             <div
@@ -286,9 +286,48 @@
 </template>
 
 <script setup>
-import { ref, watch, computed, nextTick } from 'vue'
+import { ref } from 'vue'
 import { isPluginEnabled, setPluginEnabled } from '@/utils/plugin'
 import { usePluginConfig } from '@/composables/usePluginConfig'
+
+/** 从 config 解析出表单初始值（挂载时调用一次，依赖父组件 :key 在切换资源时触发重挂载） */
+function getInitialFromConfig(config) {
+  const c = config || {}
+  const uriVal = c.uri || ''
+  const regexUriVal = c.regex_uri
+  let regexUriList = []
+  if (Array.isArray(regexUriVal) && regexUriVal.length >= 2) {
+    for (let i = 0; i < regexUriVal.length; i += 2) {
+      if (i + 1 < regexUriVal.length) {
+        regexUriList.push({ pattern: regexUriVal[i] || '', replacement: regexUriVal[i + 1] || '' })
+      }
+    }
+  }
+  let uriRewriteType = 'none'
+  if (uriVal) uriRewriteType = 'uri'
+  else if (regexUriList.length > 0) uriRewriteType = 'regex'
+
+  const headers = c.headers || {}
+  const add = headers.add || {}
+  const set = headers.set || {}
+  const remove = headers.remove || []
+  const headersAddList = Object.keys(add).map(key => ({ key, value: add[key] || '' }))
+  const headersSetList = Object.keys(set).map(key => ({ key, value: set[key] || '' }))
+  const headersRemoveList = remove.map(name => ({ name: name || '' }))
+
+  return {
+    enabled: isPluginEnabled(config),
+    uriRewriteType,
+    uri: uriVal,
+    method: c.method || '',
+    host: c.host || '',
+    regexUriList,
+    headersAddList,
+    headersSetList,
+    headersRemoveList,
+    useRealRequestUriUnsafe: !!c.use_real_request_uri_unsafe
+  }
+}
 
 const props = defineProps({
   modelValue: { type: Object, default: () => ({}) },
@@ -296,343 +335,142 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue'])
-
-// 使用 composable 加载和管理 Plugin Config
 const { config, updateConfig } = usePluginConfig(props, emit)
 
-const enabled = computed(() => isPluginEnabled(config.value))
-const uri = computed(() => config.value.uri || '')
-const method = computed(() => config.value.method || '')
-const regexUri = computed(() => {
-  const regexUriValue = config.value.regex_uri
-  if (!Array.isArray(regexUriValue) || regexUriValue.length === 0) return []
-  // regex_uri 是数组，格式为 ["pattern", "replacement", "pattern2", "replacement2", ...]
-  // 需要转换为对象数组
-  const result = []
-  for (let i = 0; i < regexUriValue.length; i += 2) {
-    if (i + 1 < regexUriValue.length) {
-      result.push({
-        pattern: regexUriValue[i] || '',
-        replacement: regexUriValue[i + 1] || ''
-      })
-    }
-  }
-  return result
-})
+const initial = getInitialFromConfig(config.value)
+const enabled = ref(initial.enabled)
+const uriRewriteType = ref(initial.uriRewriteType)
+const uri = ref(initial.uri)
+const method = ref(initial.method)
+const host = ref(initial.host)
+const regexUriList = ref(initial.regexUriList.map((x) => ({ ...x })))
+const headersAddList = ref(initial.headersAddList.map((x) => ({ ...x })))
+const headersSetList = ref(initial.headersSetList.map((x) => ({ ...x })))
+const headersRemoveList = ref(initial.headersRemoveList.map((x) => ({ ...x })))
+const useRealRequestUriUnsafe = ref(initial.useRealRequestUriUnsafe)
 
-// 计算 URI 重写类型：'uri' | 'regex' | 'none'
-const uriRewriteType = computed(() => {
-  if (uri.value) return 'uri'
-  if (regexUri.value.length > 0) return 'regex'
-  return 'none'
-})
-
-const host = computed(() => config.value.host || '')
-const headers = computed(() => config.value.headers || {})
-
-const headersAdd = computed(() => {
-  const add = headers.value.add || {}
-  return Object.keys(add).map(key => ({
-    key,
-    value: add[key] || ''
-  }))
-})
-
-const headersSet = computed(() => {
-  const set = headers.value.set || {}
-  return Object.keys(set).map(key => ({
-    key,
-    value: set[key] || ''
-  }))
-})
-
-const headersRemove = computed(() => {
-  return headers.value.remove || []
-})
-
-const useRealRequestUriUnsafe = computed(() => config.value.use_real_request_uri_unsafe || false)
-
-// 内部状态
-const localEnabled = ref(enabled.value)
-const localUriRewriteType = ref('none')
-const regexUriList = ref([])
-const headersAddList = ref([])
-const headersSetList = ref([])
-const headersRemoveList = ref([])
-// 标志：标记用户是否正在手动切换重写方式，防止 watch 覆盖用户选择
-const isUserSwitchingType = ref(false)
-
-// 计算 URI 重写类型（用于显示）
-const computedUriRewriteType = computed(() => {
-  if (uri.value) return 'uri'
-  if (regexUri.value.length > 0) return 'regex'
-  return 'none'
-})
-
-// 监听 props 变化，更新内部状态
-watch([enabled, uri, regexUri, headersAdd, headersSet, headersRemove], ([newEnabled, newUri, newRegexUri, newHeadersAdd, newHeadersSet, newHeadersRemove]) => {
-  localEnabled.value = newEnabled
-  
-  // 如果用户正在手动切换类型，不更新类型，避免覆盖用户选择
-  if (!isUserSwitchingType.value) {
-    // 更新 URI 重写类型（只在从外部数据加载时更新，用户手动切换时不覆盖）
-    const newType = newUri ? 'uri' : (Array.isArray(newRegexUri) && newRegexUri.length > 0 ? 'regex' : 'none')
-    // 只有当类型确实改变时才更新，避免用户选择被覆盖
-    if (localUriRewriteType.value !== newType) {
-      localUriRewriteType.value = newType
-    }
-  }
-  
-  if (Array.isArray(newRegexUri)) {
-    regexUriList.value = newRegexUri.length > 0 ? [...newRegexUri] : []
-  }
-  if (Array.isArray(newHeadersAdd)) {
-    headersAddList.value = newHeadersAdd.length > 0 ? [...newHeadersAdd] : []
-  }
-  if (Array.isArray(newHeadersSet)) {
-    headersSetList.value = newHeadersSet.length > 0 ? [...newHeadersSet] : []
-  }
-  if (Array.isArray(newHeadersRemove)) {
-    // 将字符串数组转换为对象数组
-    headersRemoveList.value = newHeadersRemove.length > 0 
-      ? newHeadersRemove.map(name => ({ name: name || '' }))
-      : []
-  }
-}, { immediate: true })
-
-// 初始化时设置正确的类型
-watch(computedUriRewriteType, (newType) => {
-  // 如果用户正在手动切换类型，不更新类型，避免覆盖用户选择
-  if (!isUserSwitchingType.value && localUriRewriteType.value === 'none' && newType !== 'none') {
-    localUriRewriteType.value = newType
-  }
-}, { immediate: true })
-
-watch(localEnabled, (newEnabled) => {
-  let cfg
-  if (newEnabled) {
-    cfg = buildPluginConfig()
-    if (Object.keys(cfg).length === 0) cfg = { _placeholder: true }
-    setPluginEnabled(cfg, true)
-  } else {
-    cfg = { ...config.value }
-    setPluginEnabled(cfg, false)
-  }
-  updateConfig(cfg)
-})
-
-function buildPluginConfig(overrides = {}) {
+function buildPluginConfig() {
   const base = {}
-  
-  // URI 重写：根据 localUriRewriteType 决定使用哪个
-  const currentType = localUriRewriteType.value
-  
-  if (currentType === 'uri') {
-    // 使用 URI 路径
-    const uriValue = overrides.uri !== undefined ? overrides.uri : uri.value
-    if (uriValue) {
-      base.uri = uriValue
-    }
-    // 不包含 regex_uri
+  const currentType = uriRewriteType.value
+
+  if (currentType === 'uri' && uri.value) {
+    base.uri = uri.value
   } else if (currentType === 'regex') {
-    // 使用正则表达式
-    // 构建 regex_uri 数组
-    const regexUriArray = []
-    regexUriList.value.forEach(item => {
-      if (item.pattern && item.replacement) {
-        regexUriArray.push(item.pattern, item.replacement)
-      }
+    const arr = []
+    regexUriList.value.forEach((item) => {
+      if (item.pattern && item.replacement) arr.push(item.pattern, item.replacement)
     })
-    if (regexUriArray.length > 0) {
-      base.regex_uri = regexUriArray
-    }
-    // 不包含 uri
+    if (arr.length > 0) base.regex_uri = arr
   }
-  // else: none 类型，都不包含
-  
+
   if (method.value) base.method = method.value
-  
   if (host.value) base.host = host.value
-  
-  // 构建 headers
+
   const headersObj = {}
-  
-  // headers.add
   const addObj = {}
-  headersAddList.value.forEach(item => {
-    if (item.key && item.key.trim()) {
-      addObj[item.key.trim()] = item.value || ''
-    }
+  headersAddList.value.forEach((item) => {
+    if (item.key?.trim()) addObj[item.key.trim()] = item.value || ''
   })
-  if (Object.keys(addObj).length > 0) {
-    headersObj.add = addObj
-  }
-  
-  // headers.set
   const setObj = {}
-  headersSetList.value.forEach(item => {
-    if (item.key && item.key.trim()) {
-      setObj[item.key.trim()] = item.value || ''
-    }
+  headersSetList.value.forEach((item) => {
+    if (item.key?.trim()) setObj[item.key.trim()] = item.value || ''
   })
-  if (Object.keys(setObj).length > 0) {
-    headersObj.set = setObj
-  }
-  
-  // headers.remove
-  const removeArray = headersRemoveList.value
-    .map(item => item.name ? item.name.trim() : '')
-    .filter(name => name)
-  if (removeArray.length > 0) {
-    headersObj.remove = removeArray
-  }
-  
-  if (Object.keys(headersObj).length > 0) {
-    base.headers = headersObj
-  }
-  
-  const result = { ...base, ...overrides }
-  
-  // use_real_request_uri_unsafe 处理：如果 overrides 中有，使用 overrides 的值；否则使用当前值
-  if (overrides.use_real_request_uri_unsafe !== undefined) {
-    if (overrides.use_real_request_uri_unsafe) {
-      result.use_real_request_uri_unsafe = true
-    } else {
-      // 如果明确设置为 false，删除该字段
-      delete result.use_real_request_uri_unsafe
-    }
-  } else if (useRealRequestUriUnsafe.value) {
-    result.use_real_request_uri_unsafe = true
-  }
-  
-  // 如果有实际配置，移除占位符字段
-  if (Object.keys(result).length > 0 && result._placeholder) {
-    delete result._placeholder
-  }
-  
-  return result
+  const removeArr = headersRemoveList.value
+    .map((item) => item.name?.trim())
+    .filter(Boolean)
+  if (Object.keys(addObj).length) headersObj.add = addObj
+  if (Object.keys(setObj).length) headersObj.set = setObj
+  if (removeArr.length) headersObj.remove = removeArr
+  if (Object.keys(headersObj).length) base.headers = headersObj
+
+  if (useRealRequestUriUnsafe.value) base.use_real_request_uri_unsafe = true
+  return base
 }
 
-function emitPluginConfig(overrides = {}) {
-  let cfg = buildPluginConfig(overrides)
-  if (Object.keys(cfg).length === 0 && enabled.value) cfg._placeholder = true
+function emitPluginConfig() {
+  let cfg = buildPluginConfig()
+  if (Object.keys(cfg).length === 0 && enabled.value) cfg = { _placeholder: true }
   setPluginEnabled(cfg, enabled.value)
   updateConfig(cfg)
 }
 
-const handleEnableChange = (value) => {
-  localEnabled.value = value
+function handleEnableChange(value) {
+  enabled.value = value
+  emitPluginConfig()
 }
 
-const handleUriRewriteTypeChange = (value) => {
-  isUserSwitchingType.value = true
-  localUriRewriteType.value = value
-  const cfg = { ...config.value }
-  if (value === 'uri') {
-    regexUriList.value = []
-    delete cfg.regex_uri
-    if (!uri.value) delete cfg.uri
-  } else if (value === 'regex') {
-    delete cfg.uri
-    if (regexUriList.value.length === 0) regexUriList.value.push({ pattern: '', replacement: '' })
-  } else {
-    regexUriList.value = []
-    delete cfg.uri
-    delete cfg.regex_uri
-  }
-  setPluginEnabled(cfg, enabled.value)
-  updateConfig(cfg)
-  nextTick(() => { isUserSwitchingType.value = false })
+function handleUriRewriteTypeChange(value) {
+  uriRewriteType.value = value
+  if (value === 'uri') regexUriList.value = []
+  else if (value === 'regex' && regexUriList.value.length === 0) regexUriList.value.push({ pattern: '', replacement: '' })
+  else if (value === 'none') regexUriList.value = []
+  emitPluginConfig()
 }
 
-const handleUriChange = (value) => {
-  emitPluginConfig({ uri: value || undefined })
+function handleUriChange(value) {
+  uri.value = value || ''
+  emitPluginConfig()
 }
 
-const handleMethodChange = (value) => {
-  emitPluginConfig({ method: value || undefined })
+function handleMethodChange(value) {
+  method.value = value || ''
+  emitPluginConfig()
 }
 
-const handleHostChange = (value) => {
-  emitPluginConfig({ host: value || undefined })
+function handleHostChange(value) {
+  host.value = value || ''
+  emitPluginConfig()
 }
 
-const handleUseRealRequestUriUnsafeChange = (value) => {
-  const cfg = { ...config.value }
-  if (value) cfg.use_real_request_uri_unsafe = true
-  else delete cfg.use_real_request_uri_unsafe
-  setPluginEnabled(cfg, enabled.value)
-  updateConfig(cfg)
+function handleUseRealRequestUriUnsafeChange(value) {
+  useRealRequestUriUnsafe.value = value
+  emitPluginConfig()
 }
 
-// regex_uri 相关方法
-const addRegexUri = () => {
-  regexUriList.value.push({ pattern: '', replacement: '' })
-}
-
+const addRegexUri = () => regexUriList.value.push({ pattern: '', replacement: '' })
 const removeRegexUri = (idx) => {
   regexUriList.value.splice(idx, 1)
   emitPluginConfig()
 }
-
 const updateRegexUri = (idx, field, value) => {
-  const list = regexUriList.value
-  if (list[idx]) {
-    list[idx] = { ...list[idx], [field]: value }
+  if (regexUriList.value[idx]) {
+    regexUriList.value[idx] = { ...regexUriList.value[idx], [field]: value }
     emitPluginConfig()
   }
 }
 
-// headers.add 相关方法
-const addHeaderAdd = () => {
-  headersAddList.value.push({ key: '', value: '' })
-}
-
+const addHeaderAdd = () => headersAddList.value.push({ key: '', value: '' })
 const removeHeaderAdd = (idx) => {
   headersAddList.value.splice(idx, 1)
   emitPluginConfig()
 }
-
 const updateHeaderAdd = (idx, field, value) => {
-  const list = headersAddList.value
-  if (list[idx]) {
-    list[idx] = { ...list[idx], [field]: value }
+  if (headersAddList.value[idx]) {
+    headersAddList.value[idx] = { ...headersAddList.value[idx], [field]: value }
     emitPluginConfig()
   }
 }
 
-// headers.set 相关方法
-const addHeaderSet = () => {
-  headersSetList.value.push({ key: '', value: '' })
-}
-
+const addHeaderSet = () => headersSetList.value.push({ key: '', value: '' })
 const removeHeaderSet = (idx) => {
   headersSetList.value.splice(idx, 1)
   emitPluginConfig()
 }
-
 const updateHeaderSet = (idx, field, value) => {
-  const list = headersSetList.value
-  if (list[idx]) {
-    list[idx] = { ...list[idx], [field]: value }
+  if (headersSetList.value[idx]) {
+    headersSetList.value[idx] = { ...headersSetList.value[idx], [field]: value }
     emitPluginConfig()
   }
 }
 
-// headers.remove 相关方法
-const addHeaderRemove = () => {
-  headersRemoveList.value.push({ name: '' })
-}
-
+const addHeaderRemove = () => headersRemoveList.value.push({ name: '' })
 const removeHeaderRemove = (idx) => {
   headersRemoveList.value.splice(idx, 1)
   emitPluginConfig()
 }
-
 const updateHeaderRemove = (idx, field, value) => {
-  const list = headersRemoveList.value
-  if (list[idx]) {
-    list[idx] = { ...list[idx], [field]: value }
+  if (headersRemoveList.value[idx]) {
+    headersRemoveList.value[idx] = { ...headersRemoveList.value[idx], [field]: value }
     emitPluginConfig()
   }
 }
