@@ -73,10 +73,9 @@ const ipListInput = computed({
 function buildCfg(ips, typ) {
   const cfg = {}
   setPluginEnabled(cfg, true)
-  if (ips.length) {
-    if (typ === 'whitelist') cfg.whitelist = ips
-    else cfg.blacklist = ips
-  }
+  // 至少保留 whitelist/blacklist 其一（可为空数组），否则 config 为空会被判为未启用
+  if (typ === 'whitelist') cfg.whitelist = ips
+  else cfg.blacklist = ips
   return cfg
 }
 

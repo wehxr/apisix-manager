@@ -20,7 +20,7 @@
       <el-form-item label="断路器响应码" required>
         <el-input-number
           :model-value="breakResponseCode"
-          @update:model-value="handleBreakCodeChange"
+          @update:model-value="(v) => emitField('break_response_code', v)"
           :min="200"
           :max="599"
           style="width: 100%"
@@ -30,7 +30,7 @@
       <el-form-item label="断路器响应体" required>
         <el-input
           :model-value="breakResponseBody"
-          @update:model-value="handleBreakBodyChange"
+          @update:model-value="(v) => emitField('break_response_body', v)"
           type="textarea"
           :rows="3"
           placeholder="断路器打开时返回的响应体"
@@ -65,8 +65,8 @@
       <el-form-item label="不健康状态码" required>
         <el-input
           :model-value="unhealthyStatusesInput"
-          @update:model-value="handleUnhealthyStatusesInput"
-          @blur="handleBlur"
+          @update:model-value="setUnhealthyStatusesInput"
+          @blur="applyStatusesBlur"
           placeholder="多个状态码用逗号分隔，如: 500, 502, 503"
         />
         <div class="form-tip">触发不健康状态检测的 HTTP 状态码，多个状态码用逗号分隔; 端口范围: 500-599</div>
@@ -74,7 +74,7 @@
       <el-form-item label="失败阈值" required>
         <el-input-number
           :model-value="unhealthy.failures"
-          @update:model-value="handleUnhealthyFailuresChange"
+          @update:model-value="(v) => emitField('unhealthy', { ...unhealthy, failures: v })"
           :min="1"
           :max="1000"
           style="width: 100%"
@@ -84,8 +84,8 @@
       <el-form-item label="健康状态码" required>
         <el-input
           :model-value="healthyStatusesInput"
-          @update:model-value="handleHealthyStatusesInput"
-          @blur="handleBlur"
+          @update:model-value="setHealthyStatusesInput"
+          @blur="applyStatusesBlur"
           placeholder="多个状态码用逗号分隔，如: 200, 201, 202"
         />
         <div class="form-tip">表示服务恢复的 HTTP 状态码，多个状态码用逗号分隔; 端口范围: 200-499</div>
@@ -93,7 +93,7 @@
       <el-form-item label="恢复成功次数" required>
         <el-input-number
           :model-value="healthy.successes"
-          @update:model-value="handleHealthySuccessesChange"
+          @update:model-value="(v) => emitField('healthy', { ...healthy, successes: v })"
           :min="1"
           :max="1000"
           style="width: 100%"
@@ -103,7 +103,7 @@
       <el-form-item label="熔断最大持续时间（秒）" required>
         <el-input-number
           :model-value="maxBreakerSec"
-          @update:model-value="handleMaxBreakerSecChange"
+          @update:model-value="(v) => emitField('max_breaker_sec', v)"
           :min="3"
           :max="86400"
           style="width: 100%"
@@ -115,9 +115,14 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { isPluginEnabled, setPluginEnabled } from '@/utils/plugin'
 import { usePluginConfig } from '@/composables/usePluginConfig'
+
+const DEFAULT_BREAK_RESPONSE_CODE = 503
+const DEFAULT_BREAK_RESPONSE_BODY = '服务暂时不可用，系统正在进行保护性降级'
+const DEFAULT_UNHEALTHY_STATUSES = [500, 502, 503, 504]
+const DEFAULT_HEALTHY_STATUSES = [200, 201, 202, 204, 301, 302, 304]
 
 const props = defineProps({
   modelValue: { type: Object, default: () => ({}) },
@@ -129,167 +134,120 @@ const { config, updateConfig } = usePluginConfig(props, emit)
 
 const enabled = computed(() => isPluginEnabled(config.value))
 
-// 计算各个字段
-const breakResponseCode = computed(() => {
-  if (!enabled.value) return 0
-  return config.value.break_response_code || 503
-})
-
-const breakResponseBody = computed(() => {
-  return config.value.break_response_body || '服务暂时不可用，系统正在进行保护性降级'
-})
-
-const unhealthy = computed(() => {
-  return config.value.unhealthy || {
-    http_statuses: [500, 502, 503, 504],
-    failures: 3
-  }
-})
-
-const healthy = computed(() => {
-  return config.value.healthy || {
-    http_statuses: [200, 201, 202, 204, 301, 302, 304],
-    successes: 3
-  }
-})
-
+// 从 config 派生的只读展示值（带默认值）
+const breakResponseCode = computed(() =>
+  config.value.break_response_code ?? DEFAULT_BREAK_RESPONSE_CODE
+)
+const breakResponseBody = computed(() =>
+  config.value.break_response_body ?? DEFAULT_BREAK_RESPONSE_BODY
+)
+const unhealthy = computed(() => ({
+  http_statuses: config.value.unhealthy?.http_statuses ?? DEFAULT_UNHEALTHY_STATUSES,
+  failures: config.value.unhealthy?.failures ?? 3
+}))
+const healthy = computed(() => ({
+  http_statuses: config.value.healthy?.http_statuses ?? DEFAULT_HEALTHY_STATUSES,
+  successes: config.value.healthy?.successes ?? 3
+}))
 const maxBreakerSec = computed(() => {
   const v = config.value.max_breaker_sec
   return v !== undefined && v >= 3 ? v : 300
 })
 
-const breakResponseHeaders = computed(() => {
-  const arr = config.value.break_response_headers
-  if (!Array.isArray(arr) || arr.length === 0) return []
-  return arr.map((item) => ({
-    key: item?.key ?? '',
-    value: item?.value ?? ''
-  }))
-})
-
+// 可编辑的本地状态（仅在输入/列表需要暂存时使用）
 const breakResponseHeadersList = ref([])
 const unhealthyStatusesInput = ref('')
 const healthyStatusesInput = ref('')
 
-function syncFromProps() {
-  if (Array.isArray(unhealthy.value?.http_statuses)) {
-    unhealthyStatusesInput.value = unhealthy.value.http_statuses.join(', ')
-  } else {
-    unhealthyStatusesInput.value = '500, 502, 503, 504'
-  }
-  if (Array.isArray(healthy.value?.http_statuses)) {
-    healthyStatusesInput.value = healthy.value.http_statuses.join(', ')
-  } else {
-    healthyStatusesInput.value = '200, 201, 202, 204, 301, 302, 304'
-  }
-  if (Array.isArray(breakResponseHeaders.value) && breakResponseHeaders.value.length) {
-    breakResponseHeadersList.value = breakResponseHeaders.value.map((h) => ({ key: h.key ?? '', value: h.value ?? '' }))
-  } else {
-    breakResponseHeadersList.value = []
-  }
-}
-syncFromProps()
-watch([unhealthy, healthy, breakResponseHeaders], syncFromProps, { deep: true })
+// 仅当父级 config 变化时同步本地输入/列表（如打开弹窗、切换插件后重新拉取数据）
+watch(
+  () => props.modelValue,
+  (val) => {
+    const c = val && typeof val === 'object' ? val : {}
+    unhealthyStatusesInput.value = (c.unhealthy?.http_statuses ?? DEFAULT_UNHEALTHY_STATUSES).join(', ')
+    healthyStatusesInput.value = (c.healthy?.http_statuses ?? DEFAULT_HEALTHY_STATUSES).join(', ')
+    const arr = c.break_response_headers
+    breakResponseHeadersList.value = Array.isArray(arr) && arr.length > 0
+      ? arr.map((item) => ({ key: item?.key ?? '', value: item?.value ?? '' }))
+      : []
+  },
+  { deep: true, immediate: true }
+)
 
-function buildPluginConfig(overrides = {}) {
+function parseStatusesString(str) {
+  if (!str || typeof str !== 'string') return []
+  return str
+    .split(',')
+    .map((s) => parseInt(s.trim(), 10))
+    .filter((n) => !Number.isNaN(n))
+}
+
+function buildFullConfig(overrides = {}) {
   const base = {
-    break_response_code: breakResponseCode.value,
-    break_response_body: breakResponseBody.value,
-    unhealthy: unhealthy.value,
-    healthy: healthy.value,
+    // 始终显式下发 break_response_code，避免网关使用默认 200
+    break_response_code: config.value.break_response_code ?? DEFAULT_BREAK_RESPONSE_CODE,
+    break_response_body: config.value.break_response_body ?? DEFAULT_BREAK_RESPONSE_BODY,
+    unhealthy: { ...unhealthy.value },
+    healthy: { ...healthy.value },
     max_breaker_sec: maxBreakerSec.value
   }
   const headers = breakResponseHeadersList.value
-    .filter((h) => (h.key ?? '').trim())
+    .filter((h) => (h?.key ?? '').trim())
     .map((h) => ({ key: (h.key ?? '').trim(), value: (h.value ?? '').trim() }))
   if (headers.length > 0) base.break_response_headers = headers
   return { ...base, ...overrides }
 }
 
-function emitPluginConfig(overrides = {}) {
-  const cfg = buildPluginConfig(overrides)
-  setPluginEnabled(cfg, enabled.value)
-  updateConfig(cfg)
+function emitUpdate(fullConfig) {
+  setPluginEnabled(fullConfig, enabled.value)
+  updateConfig(fullConfig)
+}
+
+function emitField(key, value) {
+  emitUpdate(buildFullConfig({ [key]: value }))
 }
 
 function handleEnableChange(value) {
-  const cfg = value ? buildPluginConfig() : { ...config.value }
-  setPluginEnabled(cfg, value)
-  updateConfig(cfg)
+  const next = value ? buildFullConfig() : { ...config.value }
+  setPluginEnabled(next, value)
+  updateConfig(next)
 }
 
-const handleBreakCodeChange = (value) => {
-  emitPluginConfig({ break_response_code: value })
-}
-
-const handleBreakBodyChange = (value) => {
-  emitPluginConfig({ break_response_body: value })
-}
-
-const addHeader = () => {
+function addHeader() {
   breakResponseHeadersList.value.push({ key: '', value: '' })
-  // 不 emit，等用户填写 key 后由 updateHeader 再同步
 }
 
-const removeHeader = (idx) => {
+function removeHeader(idx) {
   breakResponseHeadersList.value.splice(idx, 1)
-  emitPluginConfig()
+  emitUpdate(buildFullConfig())
 }
 
-const updateHeader = (idx, field, value) => {
+function updateHeader(idx, field, value) {
   const list = breakResponseHeadersList.value
   if (list[idx]) {
     list[idx] = { ...list[idx], [field]: value }
-    emitPluginConfig()
+    emitUpdate(buildFullConfig())
   }
 }
 
-const handleMaxBreakerSecChange = (value) => {
-  emitPluginConfig({ max_breaker_sec: value })
+function setUnhealthyStatusesInput(v) {
+  unhealthyStatusesInput.value = v
 }
-
-const handleUnhealthyStatusesInput = (value) => {
-  unhealthyStatusesInput.value = value
+function setHealthyStatusesInput(v) {
+  healthyStatusesInput.value = v
 }
-
-const handleHealthyStatusesInput = (value) => {
-  healthyStatusesInput.value = value
-}
-
-const handleUnhealthyFailuresChange = (value) => {
-  emitPluginConfig({
-    unhealthy: { ...unhealthy.value, failures: value }
-  })
-}
-
-const handleHealthySuccessesChange = (value) => {
-  emitPluginConfig({
-    healthy: { ...healthy.value, successes: value }
-  })
-}
-
-const handleBlur = () => {
+function applyStatusesBlur() {
   const overrides = {}
-  if (unhealthyStatusesInput.value && unhealthyStatusesInput.value.trim()) {
-    const statuses = unhealthyStatusesInput.value
-      .split(',')
-      .map((s) => parseInt(s.trim(), 10))
-      .filter((s) => !Number.isNaN(s))
-    if (statuses.length > 0) {
-      overrides.unhealthy = { ...unhealthy.value, http_statuses: statuses }
-    }
+  const rawUnhealthy = parseStatusesString(unhealthyStatusesInput.value)
+  if (rawUnhealthy.length > 0) {
+    overrides.unhealthy = { ...unhealthy.value, http_statuses: rawUnhealthy }
   }
-  if (healthyStatusesInput.value && healthyStatusesInput.value.trim()) {
-    const statuses = healthyStatusesInput.value
-      .split(',')
-      .map((s) => parseInt(s.trim(), 10))
-      .filter((s) => !Number.isNaN(s))
-    if (statuses.length > 0) {
-      overrides.healthy = { ...healthy.value, http_statuses: statuses }
-    }
+  const rawHealthy = parseStatusesString(healthyStatusesInput.value)
+  if (rawHealthy.length > 0) {
+    overrides.healthy = { ...healthy.value, http_statuses: rawHealthy }
   }
   if (Object.keys(overrides).length > 0) {
-    emitPluginConfig(overrides)
+    emitUpdate(buildFullConfig(overrides))
   }
 }
 </script>
