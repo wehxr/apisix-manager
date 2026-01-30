@@ -14,9 +14,9 @@
       </template>
     </el-alert>
     <el-form-item label="开启插件">
-      <el-switch :model-value="localEnabled" @update:model-value="handleEnableChange" />
+      <el-switch :model-value="enabled" @update:model-value="handleEnableChange" />
     </el-form-item>
-    <template v-if="localEnabled">
+    <template v-if="enabled">
       <el-form-item label="断路器响应码" required>
         <el-input-number
           :model-value="breakResponseCode"
@@ -120,56 +120,46 @@ import { isPluginEnabled, setPluginEnabled } from '@/utils/plugin'
 import { usePluginConfig } from '@/composables/usePluginConfig'
 
 const props = defineProps({
-  modelValue: {
-    type: Object,
-    default: () => ({
-      plugin_config_id: null
-    })
-  }
+  modelValue: { type: Object, default: () => ({}) },
+  resourceType: { type: String, default: '' }
 })
 
 const emit = defineEmits(['update:modelValue'])
+const { config, updateConfig } = usePluginConfig(props, emit)
 
-// 使用 composable 加载和管理 Plugin Config
-const { plugins, updatePlugins } = usePluginConfig(props, emit)
-
-// 从 plugins 中提取 api-breaker 配置
-const apiBreakerPlugin = computed(() => plugins.value['api-breaker'] || {})
-
-// 计算 enabled 状态
-const enabled = computed(() => isPluginEnabled(apiBreakerPlugin.value))
+const enabled = computed(() => isPluginEnabled(config.value))
 
 // 计算各个字段
 const breakResponseCode = computed(() => {
   if (!enabled.value) return 0
-  return apiBreakerPlugin.value.break_response_code || 503
+  return config.value.break_response_code || 503
 })
 
 const breakResponseBody = computed(() => {
-  return apiBreakerPlugin.value.break_response_body || '服务暂时不可用，系统正在进行保护性降级'
+  return config.value.break_response_body || '服务暂时不可用，系统正在进行保护性降级'
 })
 
 const unhealthy = computed(() => {
-  return apiBreakerPlugin.value.unhealthy || {
+  return config.value.unhealthy || {
     http_statuses: [500, 502, 503, 504],
     failures: 3
   }
 })
 
 const healthy = computed(() => {
-  return apiBreakerPlugin.value.healthy || {
+  return config.value.healthy || {
     http_statuses: [200, 201, 202, 204, 301, 302, 304],
     successes: 3
   }
 })
 
 const maxBreakerSec = computed(() => {
-  const v = apiBreakerPlugin.value.max_breaker_sec
+  const v = config.value.max_breaker_sec
   return v !== undefined && v >= 3 ? v : 300
 })
 
 const breakResponseHeaders = computed(() => {
-  const arr = apiBreakerPlugin.value.break_response_headers
+  const arr = config.value.break_response_headers
   if (!Array.isArray(arr) || arr.length === 0) return []
   return arr.map((item) => ({
     key: item?.key ?? '',
@@ -177,50 +167,29 @@ const breakResponseHeaders = computed(() => {
   }))
 })
 
-// 内部状态
-const localEnabled = ref(enabled.value)
 const breakResponseHeadersList = ref([])
+const unhealthyStatusesInput = ref('')
+const healthyStatusesInput = ref('')
 
-const unhealthyStatusesInput = ref(
-  Array.isArray(unhealthy.value.http_statuses)
-    ? unhealthy.value.http_statuses.join(', ')
-    : '500, 502, 503, 504'
-)
-
-const healthyStatusesInput = ref(
-  Array.isArray(healthy.value.http_statuses)
-    ? healthy.value.http_statuses.join(', ')
-    : '200, 201, 202, 204, 301, 302, 304'
-)
-
-// 监听 props 变化，更新内部状态
-watch([enabled, unhealthy, healthy, breakResponseHeaders], ([newEnabled, newUnhealthy, newHealthy, newHeaders]) => {
-  localEnabled.value = newEnabled
-  if (Array.isArray(newUnhealthy?.http_statuses)) {
-    unhealthyStatusesInput.value = newUnhealthy.http_statuses.join(', ')
-  }
-  if (Array.isArray(newHealthy?.http_statuses)) {
-    healthyStatusesInput.value = newHealthy.http_statuses.join(', ')
-  }
-  if (Array.isArray(newHeaders)) {
-    breakResponseHeadersList.value = newHeaders.length ? [...newHeaders] : []
-  }
-}, { immediate: true })
-
-// 监听内部状态变化，更新到父组件
-watch(localEnabled, (newEnabled) => {
-  const currentPlugins = { ...plugins.value }
-  
-  if (newEnabled) {
-    currentPlugins['api-breaker'] = buildPluginConfig()
-    setPluginEnabled(currentPlugins['api-breaker'], true)
+function syncFromProps() {
+  if (Array.isArray(unhealthy.value?.http_statuses)) {
+    unhealthyStatusesInput.value = unhealthy.value.http_statuses.join(', ')
   } else {
-    currentPlugins['api-breaker'] = currentPlugins['api-breaker'] || {}
-    setPluginEnabled(currentPlugins['api-breaker'], false)
+    unhealthyStatusesInput.value = '500, 502, 503, 504'
   }
-  
-  updatePlugins(currentPlugins)
-})
+  if (Array.isArray(healthy.value?.http_statuses)) {
+    healthyStatusesInput.value = healthy.value.http_statuses.join(', ')
+  } else {
+    healthyStatusesInput.value = '200, 201, 202, 204, 301, 302, 304'
+  }
+  if (Array.isArray(breakResponseHeaders.value) && breakResponseHeaders.value.length) {
+    breakResponseHeadersList.value = breakResponseHeaders.value.map((h) => ({ key: h.key ?? '', value: h.value ?? '' }))
+  } else {
+    breakResponseHeadersList.value = []
+  }
+}
+syncFromProps()
+watch([unhealthy, healthy, breakResponseHeaders], syncFromProps, { deep: true })
 
 function buildPluginConfig(overrides = {}) {
   const base = {
@@ -238,14 +207,15 @@ function buildPluginConfig(overrides = {}) {
 }
 
 function emitPluginConfig(overrides = {}) {
-  const currentPlugins = { ...plugins.value }
-  currentPlugins['api-breaker'] = buildPluginConfig(overrides)
-  setPluginEnabled(currentPlugins['api-breaker'], enabled.value)
-  updatePlugins(currentPlugins)
+  const cfg = buildPluginConfig(overrides)
+  setPluginEnabled(cfg, enabled.value)
+  updateConfig(cfg)
 }
 
-const handleEnableChange = (value) => {
-  localEnabled.value = value
+function handleEnableChange(value) {
+  const cfg = value ? buildPluginConfig() : { ...config.value }
+  setPluginEnabled(cfg, value)
+  updateConfig(cfg)
 }
 
 const handleBreakCodeChange = (value) => {

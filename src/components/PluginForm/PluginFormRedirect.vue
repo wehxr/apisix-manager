@@ -23,9 +23,9 @@
       </template>
     </el-alert>
     <el-form-item label="开启插件">
-      <el-switch :model-value="localEnabled" @update:model-value="handleEnableChange" />
+      <el-switch :model-value="enabled" @update:model-value="handleEnableChange" />
     </el-form-item>
-    <template v-if="localEnabled">
+    <template v-if="enabled">
       <el-form-item label="重定向类型">
         <el-radio-group :model-value="redirectType" @update:model-value="handleRedirectTypeChange">
           <el-radio label="uri">URI 重定向</el-radio>
@@ -169,58 +169,28 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { computed } from 'vue'
 import { isPluginEnabled, setPluginEnabled } from '@/utils/plugin'
 import { usePluginConfig } from '@/composables/usePluginConfig'
 
 const props = defineProps({
-  modelValue: {
-    type: Object,
-    default: () => ({
-      plugin_config_id: null
-    })
-  }
+  modelValue: { type: Object, default: () => ({}) },
+  resourceType: { type: String, default: '' }
 })
 
 const emit = defineEmits(['update:modelValue'])
+const { config, updateConfig } = usePluginConfig(props, emit)
 
-// 使用 composable 加载和管理 Plugin Config
-const { plugins, updatePlugins } = usePluginConfig(props, emit)
-
-// 从 plugins 中提取 redirect 配置
-const redirectPlugin = computed(() => plugins.value['redirect'] || {})
-
-// 计算 enabled 状态
-const enabled = computed(() => isPluginEnabled(redirectPlugin.value))
-
-// 计算各个字段
-const uri = computed(() => {
-  return redirectPlugin.value.uri || ''
-})
-
-const regexUri = computed(() => {
-  return redirectPlugin.value.regex_uri || []
-})
-
-const httpToHttps = computed(() => {
-  return redirectPlugin.value.http_to_https || false
-})
-
+const enabled = computed(() => isPluginEnabled(config.value))
+const uri = computed(() => config.value.uri || '')
+const regexUri = computed(() => config.value.regex_uri || [])
+const httpToHttps = computed(() => config.value.http_to_https || false)
 const retCode = computed(() => {
-  // http_to_https 模式固定使用 301
-  if (redirectPlugin.value.http_to_https) {
-    return 301
-  }
-  return redirectPlugin.value.ret_code || 302
+  if (config.value.http_to_https) return 301
+  return config.value.ret_code || 302
 })
-
-const encodeUri = computed(() => {
-  return redirectPlugin.value.encode_uri || false
-})
-
-const appendQueryString = computed(() => {
-  return redirectPlugin.value.append_query_string || false
-})
+const encodeUri = computed(() => config.value.encode_uri || false)
+const appendQueryString = computed(() => config.value.append_query_string || false)
 
 // 判断当前重定向类型
 const redirectType = computed(() => {
@@ -248,192 +218,96 @@ const regexUriTemplate = computed(() => {
   return ''
 })
 
-// 内部状态
-const localEnabled = ref(enabled.value)
-
-// 监听 props 变化，更新内部状态
-watch(enabled, (newEnabled) => {
-  localEnabled.value = newEnabled
-}, { immediate: true })
-
-// 监听内部状态变化，更新到父组件
-watch(localEnabled, (newEnabled) => {
-  const currentPlugins = { ...plugins.value }
-  
-  if (newEnabled) {
-    // 根据当前重定向类型构建配置
-    const redirectConfig = {
-      ret_code: 302,
-      encode_uri: false,
-      append_query_string: false
-    }
-    
-    if (httpToHttps.value) {
-      // http_to_https 模式：固定 ret_code 为 301，不能使用 append_query_string
-      // 注意：不设置 uri 和 regex_uri，因为它们是互斥的
-      redirectConfig.http_to_https = true
-      redirectConfig.ret_code = 301
-    } else if (regexUri.value && Array.isArray(regexUri.value) && regexUri.value.length > 0) {
-      // regex_uri 模式
-      // 注意：不设置 uri，因为它们是互斥的，APISIX 验证要求 uri 至少2个字符
-      redirectConfig.regex_uri = regexUri.value
-      redirectConfig.http_to_https = false
-      redirectConfig.ret_code = retCode.value || 302
-      redirectConfig.encode_uri = encodeUri.value || false
-      redirectConfig.append_query_string = appendQueryString.value || false
-    } else {
-      // uri 模式（默认）
-      // 注意：不设置 regex_uri 和 http_to_https，因为它们是互斥的
-      redirectConfig.uri = uri.value || ''
-      redirectConfig.http_to_https = false
-      redirectConfig.ret_code = retCode.value || 302
-      redirectConfig.encode_uri = encodeUri.value || false
-      redirectConfig.append_query_string = appendQueryString.value || false
-    }
-    
-    currentPlugins['redirect'] = redirectConfig
-    setPluginEnabled(currentPlugins['redirect'], true)
+function buildRedirectConfig() {
+  const base = { ret_code: 302, encode_uri: false, append_query_string: false }
+  if (httpToHttps.value) {
+    base.http_to_https = true
+    base.ret_code = 301
+  } else if (regexUri.value?.length) {
+    base.regex_uri = regexUri.value
+    base.http_to_https = false
+    base.ret_code = retCode.value || 302
+    base.encode_uri = encodeUri.value || false
+    base.append_query_string = appendQueryString.value || false
   } else {
-    currentPlugins['redirect'] = currentPlugins['redirect'] || {}
-    setPluginEnabled(currentPlugins['redirect'], false)
+    base.uri = uri.value || ''
+    base.http_to_https = false
+    base.ret_code = retCode.value || 302
+    base.encode_uri = encodeUri.value || false
+    base.append_query_string = appendQueryString.value || false
   }
-  
-  updatePlugins(currentPlugins)
-})
+  return base
+}
 
-const handleEnableChange = (value) => {
-  localEnabled.value = value
+function handleEnableChange(value) {
+  const cfg = value ? buildRedirectConfig() : { ...config.value }
+  setPluginEnabled(cfg, value)
+  updateConfig(cfg)
 }
 
 const handleRedirectTypeChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  // 根据类型设置配置，确保互斥字段不设置（而不是设置为空）
-  currentPlugins['redirect'] = {
-    ret_code: 302,
-    encode_uri: false,
-    append_query_string: false
-  }
-  
-  // 根据类型设置配置
+  const cfg = { ret_code: 302, encode_uri: false, append_query_string: false }
   if (value === 'uri') {
-    // uri 模式：只设置 uri，不设置 regex_uri 和 http_to_https
-    currentPlugins['redirect'].uri = uri.value || ''
-    currentPlugins['redirect'].ret_code = retCode.value || 302
-    currentPlugins['redirect'].encode_uri = encodeUri.value || false
-    currentPlugins['redirect'].append_query_string = appendQueryString.value || false
+    cfg.uri = uri.value || ''
+    cfg.ret_code = retCode.value || 302
+    cfg.encode_uri = encodeUri.value || false
+    cfg.append_query_string = appendQueryString.value || false
   } else if (value === 'regex_uri') {
-    // regex_uri 模式：只设置 regex_uri，不设置 uri（避免验证错误）和 http_to_https
-    currentPlugins['redirect'].regex_uri = regexUri.value && Array.isArray(regexUri.value) && regexUri.value.length > 0
-      ? regexUri.value
-      : ['', '']
-    currentPlugins['redirect'].ret_code = retCode.value || 302
-    currentPlugins['redirect'].encode_uri = encodeUri.value || false
-    currentPlugins['redirect'].append_query_string = appendQueryString.value || false
+    cfg.regex_uri = regexUri.value?.length > 0 ? regexUri.value : ['', '']
+    cfg.ret_code = retCode.value || 302
+    cfg.encode_uri = encodeUri.value || false
+    cfg.append_query_string = appendQueryString.value || false
   } else if (value === 'http_to_https') {
-    // http_to_https 模式：只设置 http_to_https，不设置 uri 和 regex_uri
-    currentPlugins['redirect'].http_to_https = true
-    currentPlugins['redirect'].ret_code = 301
-    // 明确不设置 append_query_string，因为文档说明不能同时配置
+    cfg.http_to_https = true
+    cfg.ret_code = 301
   }
-  
-  setPluginEnabled(currentPlugins['redirect'], enabled.value)
-  updatePlugins(currentPlugins)
+  setPluginEnabled(cfg, enabled.value)
+  updateConfig(cfg)
 }
 
 const handleUriChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  // 使用 uri 模式时，删除互斥字段而不是设置为空
-  currentPlugins['redirect'] = {
-    ...redirectPlugin.value,
-    uri: value
-  }
-  // 删除互斥字段
-  delete currentPlugins['redirect'].regex_uri
-  delete currentPlugins['redirect'].http_to_https
-  
-  setPluginEnabled(currentPlugins['redirect'], enabled.value)
-  
-  updatePlugins(currentPlugins)
+  const cfg = { ...config.value, uri: value }
+  delete cfg.regex_uri
+  delete cfg.http_to_https
+  setPluginEnabled(cfg, enabled.value)
+  updateConfig(cfg)
 }
 
 const handleRegexPatternChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
   const currentRegexUri = regexUri.value || []
-  // 使用 regex_uri 模式时，删除互斥字段而不是设置为空
-  currentPlugins['redirect'] = {
-    ...redirectPlugin.value,
-    regex_uri: [value, currentRegexUri[1] || '']
-  }
-  // 删除互斥字段，避免 APISIX 验证错误
-  delete currentPlugins['redirect'].uri
-  delete currentPlugins['redirect'].http_to_https
-  
-  setPluginEnabled(currentPlugins['redirect'], enabled.value)
-  
-  updatePlugins(currentPlugins)
+  const cfg = { ...config.value, regex_uri: [value, currentRegexUri[1] || ''] }
+  delete cfg.uri
+  delete cfg.http_to_https
+  setPluginEnabled(cfg, enabled.value)
+  updateConfig(cfg)
 }
 
 const handleRegexTemplateChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
   const currentRegexUri = regexUri.value || []
-  // 使用 regex_uri 模式时，删除互斥字段而不是设置为空
-  currentPlugins['redirect'] = {
-    ...redirectPlugin.value,
-    regex_uri: [currentRegexUri[0] || '', value]
-  }
-  // 删除互斥字段，避免 APISIX 验证错误
-  delete currentPlugins['redirect'].uri
-  delete currentPlugins['redirect'].http_to_https
-  
-  setPluginEnabled(currentPlugins['redirect'], enabled.value)
-  
-  updatePlugins(currentPlugins)
+  const cfg = { ...config.value, regex_uri: [currentRegexUri[0] || '', value] }
+  delete cfg.uri
+  delete cfg.http_to_https
+  setPluginEnabled(cfg, enabled.value)
+  updateConfig(cfg)
 }
 
 const handleCodeChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  currentPlugins['redirect'] = {
-    ...redirectPlugin.value,
-    ret_code: value
-  }
-  setPluginEnabled(currentPlugins['redirect'], enabled.value)
-  
-  updatePlugins(currentPlugins)
+  const cfg = { ...config.value, ret_code: value }
+  setPluginEnabled(cfg, enabled.value)
+  updateConfig(cfg)
 }
 
 const handleEncodeUriChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  currentPlugins['redirect'] = {
-    ...redirectPlugin.value,
-    encode_uri: value
-  }
-  setPluginEnabled(currentPlugins['redirect'], enabled.value)
-  
-  updatePlugins(currentPlugins)
+  const cfg = { ...config.value, encode_uri: value }
+  setPluginEnabled(cfg, enabled.value)
+  updateConfig(cfg)
 }
 
 const handleAppendQueryStringChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  // 如果启用 append_query_string，删除 http_to_https（文档要求不能同时配置）
-  currentPlugins['redirect'] = {
-    ...redirectPlugin.value,
-    append_query_string: value
-  }
-  // 如果启用 append_query_string，删除互斥的 http_to_https 字段
-  if (value) {
-    delete currentPlugins['redirect'].http_to_https
-  }
-  
-  setPluginEnabled(currentPlugins['redirect'], enabled.value)
-  
-  updatePlugins(currentPlugins)
+  const cfg = { ...config.value, append_query_string: value }
+  if (value) delete cfg.http_to_https
+  setPluginEnabled(cfg, enabled.value)
+  updateConfig(cfg)
 }
 
 

@@ -14,9 +14,9 @@
       </template>
     </el-alert>
     <el-form-item label="开启插件">
-      <el-switch :model-value="localEnabled" @update:model-value="handleEnableChange" />
+      <el-switch :model-value="enabled" @update:model-value="handleEnableChange" />
     </el-form-item>
-    <template v-if="localEnabled">
+    <template v-if="enabled">
       <el-form-item label="最大请求体大小（字节）" required>
         <el-input-number
           :model-value="maxBodySize"
@@ -32,76 +32,31 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { computed } from 'vue'
 import { isPluginEnabled, setPluginEnabled } from '@/utils/plugin'
 import { usePluginConfig } from '@/composables/usePluginConfig'
 
 const props = defineProps({
-  modelValue: {
-    type: Object,
-    default: () => ({
-      plugin_config_id: null
-    })
-  }
+  modelValue: { type: Object, default: () => ({}) },
+  resourceType: { type: String, default: '' }
 })
 
 const emit = defineEmits(['update:modelValue'])
+const { config, updateConfig } = usePluginConfig(props, emit)
 
-// 使用 composable 加载和管理 Plugin Config
-const { plugins, updatePlugins } = usePluginConfig(props, emit)
+const enabled = computed(() => isPluginEnabled(config.value))
+const maxBodySize = computed(() => config.value.max_body_size ?? 1048576)
 
-// 从 plugins 中提取 client-control 配置
-const clientControlPlugin = computed(() => plugins.value['client-control'] || {})
-
-// 计算 enabled 状态
-const enabled = computed(() => isPluginEnabled(clientControlPlugin.value))
-
-// 计算 max_body_size（0 表示不限制，需用 ?? 区分 0 与未设置）
-const maxBodySize = computed(() => {
-  if (!enabled.value) return 0
-  return clientControlPlugin.value.max_body_size ?? 1048576
-})
-
-// 内部状态
-const localEnabled = ref(enabled.value)
-
-// 监听 props 变化，更新内部状态
-watch(enabled, (newEnabled) => {
-  localEnabled.value = newEnabled
-}, { immediate: true })
-
-// 监听内部状态变化，更新到父组件
-watch(localEnabled, (newEnabled) => {
-  const currentPlugins = { ...plugins.value }
-  
-  if (newEnabled) {
-    currentPlugins['client-control'] = {
-      max_body_size: maxBodySize.value ?? 1048576
-    }
-    setPluginEnabled(currentPlugins['client-control'], true)
-  } else {
-    currentPlugins['client-control'] = currentPlugins['client-control'] || {}
-    currentPlugins['client-control'].max_body_size = maxBodySize.value ?? 1048576
-    setPluginEnabled(currentPlugins['client-control'], false)
-  }
-  
-  updatePlugins(currentPlugins)
-})
-
-const handleEnableChange = (value) => {
-  localEnabled.value = value
+function handleEnableChange(value) {
+  const cfg = value ? { ...config.value, max_body_size: maxBodySize.value ?? 1048576 } : { ...config.value }
+  setPluginEnabled(cfg, value)
+  updateConfig(cfg)
 }
 
-const handleMaxBodySizeChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  currentPlugins['client-control'] = {
-    ...clientControlPlugin.value,
-    max_body_size: value
-  }
-  setPluginEnabled(currentPlugins['client-control'], enabled.value)
-  
-  updatePlugins(currentPlugins)
+function handleMaxBodySizeChange(value) {
+  const cfg = { ...config.value, max_body_size: value }
+  setPluginEnabled(cfg, enabled.value)
+  updateConfig(cfg)
 }
 </script>
 
@@ -110,7 +65,7 @@ const handleMaxBodySizeChange = (value) => {
   font-size: 12px;
   color: #909399;
   margin-top: 5px;
-  display: block; 
+  display: block;
   width: 100%;
 }
 </style>

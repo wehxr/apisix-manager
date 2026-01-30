@@ -135,35 +135,18 @@ import { isPluginEnabled } from '@/utils/plugin'
 import { usePluginConfig } from '@/composables/usePluginConfig'
 
 const props = defineProps({
-  modelValue: {
-    type: Object,
-    default: () => ({
-      plugin_config_id: null
-    })
-  }
+  modelValue: { type: Object, default: () => ({}) },
+  resourceType: { type: String, default: '' }
 })
 
 const emit = defineEmits(['update:modelValue'])
+const { config, updateConfig } = usePluginConfig(props, emit)
 
-// 使用 composable 加载和管理 Plugin Config
-const { plugins, updatePlugins } = usePluginConfig(props, emit)
+const enabled = computed(() => isPluginEnabled(config.value))
 
-// 从 plugins 中提取 basic-auth 配置
-const basicAuthPlugin = computed(() => plugins.value['basic-auth'] || {})
-const consumerRestrictionPlugin = computed(() => plugins.value['consumer-restriction'] || {})
-
-// 计算 enabled 状态
-// basic-auth 的启用状态由 consumer-restriction 决定
-// 与列表显示使用相同的判断逻辑：只要 consumer-restriction 存在且 type 是 consumer_name 或 consumer_group_id，就认为启用
-const enabled = computed(() => {
-  // 检查 consumer-restriction 的启用状态，而不是 basic-auth
-  return isPluginEnabled(consumerRestrictionPlugin.value)
-})
-
-// 计算 type（清空名单时仍按 cr.type 保持当前类型，不切回消费者）
 const type = computed(() => {
   if (!enabled.value) return 'consumer'
-  const cr = consumerRestrictionPlugin.value
+  const cr = config.value
   const restrictionType = cr.type || 'consumer_name'
   return restrictionType === 'consumer_group_id' ? 'group' : 'consumer'
 })
@@ -267,31 +250,19 @@ const handleTypeChange = (value) => {
   nextTick(() => { skipLocalEnableTypeEmit = false })
 }
 
-// 始终保留 consumer-restriction（不删除），用于切换 type 时避免触发禁用
 const emitConsumerRestrictionKeep = (restrictionType, whiteArr, blackArr) => {
   isInternalUpdate = true
-  const currentPlugins = { ...plugins.value }
   const white = Array.isArray(whiteArr) ? whiteArr : []
   const black = Array.isArray(blackArr) ? blackArr : []
-  // 确保 basic-auth 存在
-  currentPlugins['basic-auth'] = currentPlugins['basic-auth'] || {}
-  // basic-auth 的启用/禁用完全由 consumer-restriction 决定
   const base = {
     type: restrictionType === 'consumer' ? 'consumer_name' : 'consumer_group_id',
     rejected_msg: '访问被拒绝，您没有权限访问此路由'
   }
-  // 只有当数组长度 > 0 时才设置，否则不设置（避免验证错误）
-  if (white.length > 0) {
-    base.whitelist = white
-  }
-  if (black.length > 0) {
-    base.blacklist = black
-  }
-  currentPlugins['consumer-restriction'] = base
-  updatePlugins(currentPlugins)
+  if (white.length > 0) base.whitelist = white
+  if (black.length > 0) base.blacklist = black
+  updateConfig(base)
 }
 
-// 根据当前本地白/黑名单 emit；两侧都为空时保留 consumer-restriction（仅 type + rejected_msg），不删除插件
 const emitConsumerRestrictionFromLocal = (restrictionType) => {
   const isConsumer = restrictionType === 'consumer'
   const white = isConsumer ? localConsumerWhitelist.value : localGroupWhitelist.value
@@ -299,22 +270,13 @@ const emitConsumerRestrictionFromLocal = (restrictionType) => {
   const w = Array.isArray(white) ? white : []
   const b = Array.isArray(black) ? black : []
   isInternalUpdate = true
-  const currentPlugins = { ...plugins.value }
-  // 确保 basic-auth 存在
-  currentPlugins['basic-auth'] = currentPlugins['basic-auth'] || {}
   const base = {
     type: isConsumer ? 'consumer_name' : 'consumer_group_id',
     rejected_msg: '访问被拒绝，您没有权限访问'
   }
-  // 只有当数组长度 > 0 时才设置，否则不设置（避免验证错误）
-  if (w.length > 0) {
-    base.whitelist = w
-  }
-  if (b.length > 0) {
-    base.blacklist = b
-  }
-  currentPlugins['consumer-restriction'] = base
-  updatePlugins(currentPlugins)
+  if (w.length > 0) base.whitelist = w
+  if (b.length > 0) base.blacklist = b
+  updateConfig(base)
 }
 
 // 监听 props 变化，更新内部状态
@@ -342,9 +304,8 @@ watch([localGroupWhitelist, localGroupBlacklist], () => {
   emitConsumerRestrictionFromLocal('group')
 }, { deep: true })
 
-// 从 plugins 同步白/黑名单到本地 ref（打开弹窗、回显已保存配置时）
 watch(
-  () => plugins.value['consumer-restriction'],
+  () => config.value,
   (cr) => {
     if (isInternalUpdate) {
       isInternalUpdate = false
@@ -374,51 +335,29 @@ watch(
   { immediate: true, deep: true }
 )
 
-// 监听内部状态变化，更新到父组件（仅 basic-auth 开关）
-// basic-auth 的启用/禁用完全由 consumer-restriction 的启用/禁用决定
-// 关闭基础认证时：设置 consumer-restriction 为 _meta.disable = true（保留原配置）
-// 开启基础认证时：移除 consumer-restriction 的 _meta.disable，并确保 basic-auth 和 consumer-restriction 都存在
 watch([localEnable, localType], ([newEnabled, newType]) => {
   if (skipLocalEnableTypeEmit) return
-  const currentPlugins = { ...plugins.value }
-  const cr = currentPlugins['consumer-restriction'] || {}
-  
+  const cr = config.value || {}
+  let next
   if (newEnabled) {
-    // 开启时：确保 basic-auth 和 consumer-restriction 都存在
-    currentPlugins['basic-auth'] = currentPlugins['basic-auth'] || {}
-    
-    // 如果 consumer-restriction 不存在或只有 _meta，创建默认配置
     if (Object.keys(cr).length === 0 || (Object.keys(cr).length === 1 && cr._meta)) {
       const restrictionType = newType === 'consumer' ? 'consumer_name' : 'consumer_group_id'
-      currentPlugins['consumer-restriction'] = {
-        type: restrictionType,
-        rejected_msg: '访问被拒绝，您没有权限访问此路由'
-      }
+      next = { type: restrictionType, rejected_msg: '访问被拒绝，您没有权限访问此路由' }
     } else {
-      // 如果已存在配置，移除 _meta.disable
-      const next = { ...cr }
+      next = { ...cr }
       if (next._meta?.disable) {
         delete next._meta.disable
         if (Object.keys(next._meta || {}).length === 0) delete next._meta
       }
-      // 确保 type 和 rejected_msg 存在
-      if (!next.type) {
-        next.type = newType === 'consumer' ? 'consumer_name' : 'consumer_group_id'
-      }
-      if (!next.rejected_msg) {
-        next.rejected_msg = '访问被拒绝，您没有权限访问此路由'
-      }
-      currentPlugins['consumer-restriction'] = next
+      if (!next.type) next.type = newType === 'consumer' ? 'consumer_name' : 'consumer_group_id'
+      if (!next.rejected_msg) next.rejected_msg = '访问被拒绝，您没有权限访问此路由'
     }
   } else {
-    // 关闭时：设置 consumer-restriction 为 _meta.disable = true，保留原有 whitelist/blacklist/type 等
-    // 如果 consumer-restriction 不存在，创建一个只有 _meta.disable 的配置
-    const next = Object.keys(cr).length > 0 ? { ...cr } : {}
+    next = Object.keys(cr).length > 0 ? { ...cr } : {}
     if (!next._meta) next._meta = {}
     next._meta.disable = true
-    currentPlugins['consumer-restriction'] = next
   }
-  updatePlugins(currentPlugins)
+  updateConfig(next)
 })
 </script>
 

@@ -14,9 +14,9 @@
       </template>
     </el-alert>
     <el-form-item label="开启插件">
-      <el-switch v-model="localEnable" @change="handleEnableChange" />
+      <el-switch :model-value="enabled" @update:model-value="handleEnableChange" />
     </el-form-item>
-    <template v-if="localEnable">
+    <template v-if="enabled">
       <el-form-item label="允许的源">
         <el-input
           :model-value="originsInput"
@@ -119,89 +119,67 @@ import { isPluginEnabled, setPluginEnabled } from '@/utils/plugin'
 import { usePluginConfig } from '@/composables/usePluginConfig'
 
 const props = defineProps({
-  modelValue: {
-    type: Object,
-    default: () => ({
-      plugin_config_id: null
-    })
-  }
+  modelValue: { type: Object, default: () => ({}) },
+  resourceType: { type: String, default: '' }
 })
 
 const emit = defineEmits(['update:modelValue'])
+const { config, updateConfig } = usePluginConfig(props, emit)
 
-// 使用 composable 加载和管理 Plugin Config
-const { plugins, updatePlugins } = usePluginConfig(props, emit)
-
-// 从 plugins 中提取 cors 配置
-const corsPlugin = computed(() => plugins.value.cors || {})
-
-// 计算 enabled 状态
-const enabled = computed(() => isPluginEnabled(corsPlugin.value))
+const enabled = computed(() => isPluginEnabled(config.value))
 
 // 计算各个字段
 const origins = computed(() => {
   if (!enabled.value) return ''
-  if (corsPlugin.value.allow_origins && corsPlugin.value.allow_origins !== '*') {
-    return Array.isArray(corsPlugin.value.allow_origins)
-      ? corsPlugin.value.allow_origins.join(', ')
-      : corsPlugin.value.allow_origins
+  if (config.value.allow_origins && config.value.allow_origins !== '*') {
+    return Array.isArray(config.value.allow_origins)
+      ? config.value.allow_origins.join(', ')
+      : config.value.allow_origins
   }
   return ''
 })
 
 const methods = computed(() => {
   if (!enabled.value) return ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD']
-  if (corsPlugin.value.allow_methods) {
-    if (typeof corsPlugin.value.allow_methods === 'string') {
-      if (corsPlugin.value.allow_methods === '*') {
-        return ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD']
-      }
-      return corsPlugin.value.allow_methods.split(',').map(s => s.trim()).filter(s => s)
-    } else if (Array.isArray(corsPlugin.value.allow_methods)) {
-      return corsPlugin.value.allow_methods
+  if (config.value.allow_methods) {
+    if (typeof config.value.allow_methods === 'string') {
+      if (config.value.allow_methods === '*') return ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD']
+      return config.value.allow_methods.split(',').map(s => s.trim()).filter(s => s)
     }
+    if (Array.isArray(config.value.allow_methods)) return config.value.allow_methods
   }
   return ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD']
 })
 
 const allowHeaders = computed(() => {
   if (!enabled.value) return 'Content-Type, Authorization, X-Requested-With, X-CSRF-Token'
-  if (corsPlugin.value.allow_headers) {
-    if (corsPlugin.value.allow_headers === '*') {
-      return 'Content-Type, Authorization, X-Requested-With, X-CSRF-Token'
-    }
-    return Array.isArray(corsPlugin.value.allow_headers)
-      ? corsPlugin.value.allow_headers.join(', ')
-      : corsPlugin.value.allow_headers
+  if (config.value.allow_headers) {
+    if (config.value.allow_headers === '*') return 'Content-Type, Authorization, X-Requested-With, X-CSRF-Token'
+    return Array.isArray(config.value.allow_headers)
+      ? config.value.allow_headers.join(', ')
+      : config.value.allow_headers
   }
   return 'Content-Type, Authorization, X-Requested-With, X-CSRF-Token'
 })
 
 const exposeHeaders = computed(() => {
   if (!enabled.value) return ''
-  if (corsPlugin.value.expose_headers) {
-    return Array.isArray(corsPlugin.value.expose_headers)
-      ? corsPlugin.value.expose_headers.join(', ')
-      : corsPlugin.value.expose_headers
+  if (config.value.expose_headers) {
+    return Array.isArray(config.value.expose_headers)
+      ? config.value.expose_headers.join(', ')
+      : config.value.expose_headers
   }
   return ''
 })
 
-const maxAge = computed(() => {
-  return corsPlugin.value.max_age !== undefined ? corsPlugin.value.max_age : 1728000
-})
-
-const allowCredential = computed(() => {
-  return corsPlugin.value.allow_credential !== undefined ? corsPlugin.value.allow_credential : false
-})
-
+const maxAge = computed(() => config.value.max_age !== undefined ? config.value.max_age : 1728000)
+const allowCredential = computed(() => config.value.allow_credential !== undefined ? config.value.allow_credential : false)
 const allowOriginsByRegex = computed(() => {
   if (!enabled.value) return []
-  return corsPlugin.value.allow_origins_by_regex || []
+  return config.value.allow_origins_by_regex || []
 })
 
 // 内部状态
-const localEnable = ref(enabled.value)
 const originsInput = ref(origins.value)
 const methodsValue = ref(methods.value)
 const allowHeadersInput = ref(allowHeaders.value)
@@ -223,53 +201,23 @@ watch([enabled, origins, methods, allowHeaders, exposeHeaders, maxAge, allowCred
     allowOriginsByRegexList.value = [...newAllowOriginsByRegex]
   }, { immediate: true })
 
-// 监听内部状态变化，更新到父组件
-watch(localEnable, (newEnabled) => {
-  const currentPlugins = { ...plugins.value }
-  
-  if (newEnabled) {
-    currentPlugins.cors = {}
-    setPluginEnabled(currentPlugins.cors, true)
-    
-    // 设置各个字段
-    if (originsInput.value && originsInput.value.trim()) {
-      currentPlugins.cors.allow_origins = originsInput.value.trim()
-    } else if (!allowCredentialValue.value) {
-      currentPlugins.cors.allow_origins = '*'
-    }
-    
-    if (methodsValue.value && methodsValue.value.length > 0) {
-      currentPlugins.cors.allow_methods = methodsValue.value.join(',')
-    } else {
-      currentPlugins.cors.allow_methods = 'GET, POST, PUT, DELETE, OPTIONS, HEAD'
-    }
-    
-    if (allowHeadersInput.value && allowHeadersInput.value.trim()) {
-      currentPlugins.cors.allow_headers = allowHeadersInput.value.trim()
-    } else {
-      currentPlugins.cors.allow_headers = 'Content-Type, Authorization, X-Requested-With, X-CSRF-Token'
-    }
-    
-    if (exposeHeadersInput.value && exposeHeadersInput.value.trim()) {
-      currentPlugins.cors.expose_headers = exposeHeadersInput.value.trim()
-    }
-    
-    currentPlugins.cors.max_age = maxAgeValue.value !== undefined ? maxAgeValue.value : 1728000
-    currentPlugins.cors.allow_credential = allowCredentialValue.value
-    
-    if (allowOriginsByRegexList.value && allowOriginsByRegexList.value.length > 0) {
-      currentPlugins.cors.allow_origins_by_regex = allowOriginsByRegexList.value.filter(r => r && r.trim())
-    }
-  } else {
-    currentPlugins.cors = currentPlugins.cors || {}
-    setPluginEnabled(currentPlugins.cors, false)
-  }
-  
-  updatePlugins(currentPlugins)
-})
+function buildCorsConfig() {
+  const cfg = {}
+  if (originsInput.value?.trim()) cfg.allow_origins = originsInput.value.trim()
+  else if (!allowCredentialValue.value) cfg.allow_origins = '*'
+  cfg.allow_methods = methodsValue.value?.length ? methodsValue.value.join(',') : 'GET, POST, PUT, DELETE, OPTIONS, HEAD'
+  cfg.allow_headers = allowHeadersInput.value?.trim() || 'Content-Type, Authorization, X-Requested-With, X-CSRF-Token'
+  if (exposeHeadersInput.value?.trim()) cfg.expose_headers = exposeHeadersInput.value.trim()
+  cfg.max_age = maxAgeValue.value !== undefined ? maxAgeValue.value : 1728000
+  cfg.allow_credential = allowCredentialValue.value
+  if (allowOriginsByRegexList.value?.length) cfg.allow_origins_by_regex = allowOriginsByRegexList.value.filter((r) => r?.trim())
+  return cfg
+}
 
-const handleEnableChange = (value) => {
-  localEnable.value = value
+function handleEnableChange(value) {
+  const cfg = value ? buildCorsConfig() : { ...config.value }
+  setPluginEnabled(cfg, value)
+  updateConfig(cfg)
 }
 
 const handleOriginsInput = (value) => {
@@ -311,44 +259,10 @@ const removeRegex = (idx) => {
 }
 
 const handleBlur = () => {
-  const currentPlugins = { ...plugins.value }
-  
-  if (localEnable.value) {
-    currentPlugins.cors = {}
-    setPluginEnabled(currentPlugins.cors, true)
-    
-    // 设置各个字段
-    if (originsInput.value && originsInput.value.trim()) {
-      currentPlugins.cors.allow_origins = originsInput.value.trim()
-    } else if (!allowCredentialValue.value) {
-      currentPlugins.cors.allow_origins = '*'
-    }
-    
-    if (methodsValue.value && methodsValue.value.length > 0) {
-      currentPlugins.cors.allow_methods = methodsValue.value.join(',')
-    } else {
-      currentPlugins.cors.allow_methods = 'GET, POST, PUT, DELETE, OPTIONS, HEAD'
-    }
-    
-    if (allowHeadersInput.value && allowHeadersInput.value.trim()) {
-      currentPlugins.cors.allow_headers = allowHeadersInput.value.trim()
-    } else {
-      currentPlugins.cors.allow_headers = 'Content-Type, Authorization, X-Requested-With, X-CSRF-Token'
-    }
-    
-    if (exposeHeadersInput.value && exposeHeadersInput.value.trim()) {
-      currentPlugins.cors.expose_headers = exposeHeadersInput.value.trim()
-    }
-    
-    currentPlugins.cors.max_age = maxAgeValue.value !== undefined ? maxAgeValue.value : 1728000
-    currentPlugins.cors.allow_credential = allowCredentialValue.value
-    
-    if (allowOriginsByRegexList.value && allowOriginsByRegexList.value.length > 0) {
-      currentPlugins.cors.allow_origins_by_regex = allowOriginsByRegexList.value.filter(r => r && r.trim())
-    }
-  }
-  
-  updatePlugins(currentPlugins)
+  if (!localEnable.value) return
+  const cfg = buildCorsConfig()
+  setPluginEnabled(cfg, true)
+  updateConfig(cfg)
 }
 </script>
 

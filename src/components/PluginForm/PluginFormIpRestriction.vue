@@ -14,11 +14,11 @@
       </template>
     </el-alert>
     <el-form-item label="开启插件">
-      <el-switch v-model="localEnable" @change="handleEnableChange" />
+      <el-switch :model-value="enabled" @update:model-value="handleEnableChange" />
     </el-form-item>
-    <template v-if="localEnable">
+    <template v-if="enabled">
       <el-form-item label="限制类型" required>
-        <el-radio-group v-model="localType" @change="handleTypeChange">
+        <el-radio-group :model-value="type" @update:model-value="handleTypeChange">
           <el-radio label="whitelist">白名单（仅允许）</el-radio>
           <el-radio label="blacklist">黑名单（禁止）</el-radio>
         </el-radio-group>
@@ -27,7 +27,6 @@
         <el-input
           :model-value="ipListInput"
           @update:model-value="handleIpListInput"
-          @blur="handleBlur"
           type="textarea"
           :rows="4"
           placeholder="每行一个 IP 或 CIDR，如:&#10;192.168.1.1&#10;10.0.0.0/8"
@@ -39,146 +38,69 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { computed } from 'vue'
 import { isPluginEnabled, setPluginEnabled } from '@/utils/plugin'
 import { usePluginConfig } from '@/composables/usePluginConfig'
 
 const props = defineProps({
-  modelValue: {
-    type: Object,
-    default: () => ({
-      plugin_config_id: null
-    })
-  }
+  modelValue: { type: Object, default: () => ({}) },
+  resourceType: { type: String, default: '' }
 })
 
 const emit = defineEmits(['update:modelValue'])
+const { config, updateConfig } = usePluginConfig(props, emit)
 
-// 使用 composable 加载和管理 Plugin Config
-const { plugins, updatePlugins } = usePluginConfig(props, emit)
-
-// 从 plugins 中提取 ip-restriction 配置
-const ipRestrictionPlugin = computed(() => plugins.value['ip-restriction'] || {})
-
-// 计算 enabled 状态
-const enabled = computed(() => isPluginEnabled(ipRestrictionPlugin.value))
-
-// 计算 type 和 ipList
+const enabled = computed(() => isPluginEnabled(config.value))
 const type = computed(() => {
-  if (!enabled.value) return 'whitelist'
-  if (ipRestrictionPlugin.value.whitelist) {
-    return 'whitelist'
-  } else if (ipRestrictionPlugin.value.blacklist) {
-    return 'blacklist'
-  }
+  if (config.value.whitelist) return 'whitelist'
+  if (config.value.blacklist) return 'blacklist'
   return 'whitelist'
 })
-
 const ipList = computed(() => {
-  if (!enabled.value) return []
-  if (ipRestrictionPlugin.value.whitelist) {
-    return ipRestrictionPlugin.value.whitelist
-  } else if (ipRestrictionPlugin.value.blacklist) {
-    return ipRestrictionPlugin.value.blacklist
-  }
+  if (config.value.whitelist) return config.value.whitelist
+  if (config.value.blacklist) return config.value.blacklist
   return []
 })
 
-// 内部状态
-const localEnable = ref(enabled.value)
-const localType = ref(type.value)
-const ipListInput = ref('')
-
-// 初始化 IP 列表输入
-if (ipList.value.length > 0) {
-  ipListInput.value = ipList.value.join('\n')
-}
-
-// 监听 props 变化，更新内部状态
-watch([enabled, type, ipList], ([newEnabled, newType, newIpList]) => {
-  localEnable.value = newEnabled
-  localType.value = newType
-  if (newIpList && newIpList.length > 0) {
-    ipListInput.value = newIpList.join('\n')
-  } else {
-    ipListInput.value = ''
+const ipListInput = computed({
+  get: () => ipList.value.join('\n'),
+  set: (v) => {
+    const ips = (v || '').split('\n').map((s) => s.trim()).filter(Boolean)
+    applyIpList(ips)
   }
-}, { immediate: true })
-
-// 监听内部状态变化，更新到父组件
-watch([localEnable, localType], ([newEnabled, newType]) => {
-  const currentPlugins = { ...plugins.value }
-  
-  if (newEnabled) {
-    currentPlugins['ip-restriction'] = {}
-    setPluginEnabled(currentPlugins['ip-restriction'], true)
-    
-    // 根据类型设置 whitelist 或 blacklist
-    if (ipListInput.value && ipListInput.value.trim()) {
-      const ips = ipListInput.value.split('\n').map(s => s.trim()).filter(s => s)
-      if (newType === 'whitelist') {
-        currentPlugins['ip-restriction'].whitelist = ips
-      } else {
-        currentPlugins['ip-restriction'].blacklist = ips
-      }
-    }
-  } else {
-    currentPlugins['ip-restriction'] = currentPlugins['ip-restriction'] || {}
-    setPluginEnabled(currentPlugins['ip-restriction'], false)
-  }
-  
-  updatePlugins(currentPlugins)
 })
 
-const handleEnableChange = (value) => {
-  localEnable.value = value
-}
-
-const handleTypeChange = (value) => {
-  localType.value = value
-  // 类型变化时立即更新配置
-  const currentPlugins = { ...plugins.value }
-  
-  if (localEnable.value) {
-    currentPlugins['ip-restriction'] = {}
-    setPluginEnabled(currentPlugins['ip-restriction'], true)
-    
-    if (ipListInput.value && ipListInput.value.trim()) {
-      const ips = ipListInput.value.split('\n').map(s => s.trim()).filter(s => s)
-      if (value === 'whitelist') {
-        currentPlugins['ip-restriction'].whitelist = ips
-      } else {
-        currentPlugins['ip-restriction'].blacklist = ips
-      }
-    }
+function buildCfg(ips, typ) {
+  const cfg = {}
+  setPluginEnabled(cfg, true)
+  if (ips.length) {
+    if (typ === 'whitelist') cfg.whitelist = ips
+    else cfg.blacklist = ips
   }
-  
-  updatePlugins(currentPlugins)
+  return cfg
 }
 
-const handleIpListInput = (value) => {
+function applyIpList(ips) {
+  const cfg = buildCfg(ips, type.value)
+  updateConfig(cfg)
+}
+
+function handleEnableChange(value) {
+  const cfg = value
+    ? buildCfg((ipListInput.value || '').split('\n').map((s) => s.trim()).filter(Boolean), type.value)
+    : { ...config.value }
+  setPluginEnabled(cfg, value)
+  updateConfig(cfg)
+}
+
+function handleTypeChange(value) {
+  const ips = (ipListInput.value || '').split('\n').map((s) => s.trim()).filter(Boolean)
+  const cfg = buildCfg(ips, value)
+  updateConfig(cfg)
+}
+
+function handleIpListInput(value) {
   ipListInput.value = value
-}
-
-const handleBlur = () => {
-  const currentPlugins = { ...plugins.value }
-  
-  if (ipListInput.value && localEnable.value) {
-    const ips = ipListInput.value.split('\n').map(s => s.trim()).filter(s => s)
-    currentPlugins['ip-restriction'] = {}
-    setPluginEnabled(currentPlugins['ip-restriction'], true)
-    
-    if (localType.value === 'whitelist') {
-      currentPlugins['ip-restriction'].whitelist = ips
-    } else {
-      currentPlugins['ip-restriction'].blacklist = ips
-    }
-  } else if (!localEnable.value) {
-    currentPlugins['ip-restriction'] = currentPlugins['ip-restriction'] || {}
-    setPluginEnabled(currentPlugins['ip-restriction'], false)
-  }
-  
-  updatePlugins(currentPlugins)
 }
 </script>
 
@@ -187,7 +109,7 @@ const handleBlur = () => {
   font-size: 12px;
   color: #909399;
   margin-top: 5px;
-  display: block; 
+  display: block;
   width: 100%;
 }
 </style>

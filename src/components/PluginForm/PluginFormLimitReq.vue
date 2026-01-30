@@ -15,9 +15,9 @@
     </el-alert>
     <el-divider>配置</el-divider>
     <el-form-item label="开启插件">
-      <el-switch :model-value="localEnabled" @update:model-value="handleEnableChange" />
+      <el-switch :model-value="enabled" @update:model-value="handleEnableChange" />
     </el-form-item>
-    <template v-if="localEnabled">
+    <template v-if="enabled">
       <el-form-item label="请求速率（rate）（req/s）" required>
         <el-input-number
           :model-value="rate"
@@ -330,204 +330,161 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { computed } from 'vue'
 import { isPluginEnabled, setPluginEnabled } from '@/utils/plugin'
 import { usePluginConfig } from '@/composables/usePluginConfig'
 
 const props = defineProps({
-  modelValue: {
-    type: Object,
-    default: () => ({
-      plugin_config_id: null
-    })
-  }
+  modelValue: { type: Object, default: () => ({}) },
+  resourceType: { type: String, default: '' }
 })
 
 const emit = defineEmits(['update:modelValue'])
+const { config, updateConfig } = usePluginConfig(props, emit)
 
-// 使用 composable 加载和管理 Plugin Config
-const { plugins, updatePlugins } = usePluginConfig(props, emit)
-
-// 从 plugins 中提取 limit-req 配置
-const limitReqPlugin = computed(() => plugins.value['limit-req'] || {})
-
-// 计算 enabled 状态
-const enabled = computed(() => isPluginEnabled(limitReqPlugin.value))
+const enabled = computed(() => isPluginEnabled(config.value))
 
 // 计算各个字段
 const rate = computed(() => {
-  return limitReqPlugin.value.rate || 1
+  return config.value.rate || 1
 })
 
 const burst = computed(() => {
-  return limitReqPlugin.value.burst !== undefined ? limitReqPlugin.value.burst : 0
+  return config.value.burst !== undefined ? config.value.burst : 0
 })
 
 // key_type 固定为 'var_combination'
 const keyType = computed(() => 'var_combination')
 
 const key = computed(() => {
-  return limitReqPlugin.value.key || '$remote_addr'
+  return config.value.key || '$remote_addr'
 })
 
 const nodelay = computed(() => {
-  return limitReqPlugin.value.nodelay !== undefined ? limitReqPlugin.value.nodelay : false
+  return config.value.nodelay !== undefined ? config.value.nodelay : false
 })
 
 const rejectionCode = computed(() => {
   // 兼容旧配置中的 rejection_code，但优先使用 rejected_code
-  return limitReqPlugin.value.rejected_code !== undefined 
-    ? limitReqPlugin.value.rejected_code 
-    : (limitReqPlugin.value.rejection_code !== undefined ? limitReqPlugin.value.rejection_code : 429)
+  return config.value.rejected_code !== undefined 
+    ? config.value.rejected_code 
+    : (config.value.rejection_code !== undefined ? config.value.rejection_code : 429)
 })
 
 const rejectionMsg = computed(() => {
   // 兼容旧配置中的 rejection_msg，但优先使用 rejected_msg
-  const msg = limitReqPlugin.value.rejected_msg !== undefined 
-    ? limitReqPlugin.value.rejected_msg 
-    : limitReqPlugin.value.rejection_msg
+  const msg = config.value.rejected_msg !== undefined 
+    ? config.value.rejected_msg 
+    : config.value.rejection_msg
   return msg !== undefined ? msg : ''
 })
 
 const showLimitQuotaHeader = computed(() => {
-  return limitReqPlugin.value.show_limit_quota_header !== undefined ? limitReqPlugin.value.show_limit_quota_header : true
+  return config.value.show_limit_quota_header !== undefined ? config.value.show_limit_quota_header : true
 })
 
 const allowDegradation = computed(() => {
-  return limitReqPlugin.value.allow_degradation !== undefined ? limitReqPlugin.value.allow_degradation : true
+  return config.value.allow_degradation !== undefined ? config.value.allow_degradation : true
 })
 
 const policy = computed(() => {
-  return limitReqPlugin.value.policy || 'local'
+  return config.value.policy || 'local'
 })
 
 const redisHost = computed(() => {
-  return limitReqPlugin.value.redis_host || ''
+  return config.value.redis_host || ''
 })
 
 const redisPort = computed(() => {
-  return limitReqPlugin.value.redis_port !== undefined ? limitReqPlugin.value.redis_port : 6379
+  return config.value.redis_port !== undefined ? config.value.redis_port : 6379
 })
 
 const redisUsername = computed(() => {
-  return limitReqPlugin.value.redis_username || ''
+  return config.value.redis_username || ''
 })
 
 const redisPassword = computed(() => {
-  return limitReqPlugin.value.redis_password || ''
+  return config.value.redis_password || ''
 })
 
 const redisSsl = computed(() => {
-  return limitReqPlugin.value.redis_ssl !== undefined ? limitReqPlugin.value.redis_ssl : false
+  return config.value.redis_ssl !== undefined ? config.value.redis_ssl : false
 })
 
 const redisSslVerify = computed(() => {
-  return limitReqPlugin.value.redis_ssl_verify !== undefined ? limitReqPlugin.value.redis_ssl_verify : false
+  return config.value.redis_ssl_verify !== undefined ? config.value.redis_ssl_verify : false
 })
 
 const redisDatabase = computed(() => {
-  return limitReqPlugin.value.redis_database !== undefined ? limitReqPlugin.value.redis_database : 0
+  return config.value.redis_database !== undefined ? config.value.redis_database : 0
 })
 
 const redisTimeout = computed(() => {
-  return limitReqPlugin.value.redis_timeout !== undefined ? limitReqPlugin.value.redis_timeout : 1000
+  return config.value.redis_timeout !== undefined ? config.value.redis_timeout : 1000
 })
 
 const redisClusterNodes = computed(() => {
-  return Array.isArray(limitReqPlugin.value.redis_cluster_nodes) 
-    ? limitReqPlugin.value.redis_cluster_nodes 
+  return Array.isArray(config.value.redis_cluster_nodes) 
+    ? config.value.redis_cluster_nodes 
     : []
 })
 
 const redisClusterName = computed(() => {
-  return limitReqPlugin.value.redis_cluster_name || ''
+  return config.value.redis_cluster_name || ''
 })
 
 const redisClusterSsl = computed(() => {
-  return limitReqPlugin.value.redis_cluster_ssl !== undefined ? limitReqPlugin.value.redis_cluster_ssl : false
+  return config.value.redis_cluster_ssl !== undefined ? config.value.redis_cluster_ssl : false
 })
 
 const redisClusterSslVerify = computed(() => {
-  return limitReqPlugin.value.redis_cluster_ssl_verify !== undefined ? limitReqPlugin.value.redis_cluster_ssl_verify : false
+  return config.value.redis_cluster_ssl_verify !== undefined ? config.value.redis_cluster_ssl_verify : false
 })
 
-// 内部状态
-const localEnabled = ref(enabled.value)
-
-
-// 监听 props 变化，更新内部状态
-watch(enabled, (newEnabled) => {
-  localEnabled.value = newEnabled
-}, { immediate: true })
-
-// 监听内部状态变化，更新到父组件
-watch(localEnabled, (newEnabled) => {
-  const currentPlugins = { ...plugins.value }
-  
-  if (newEnabled) {
-    currentPlugins['limit-req'] = {
-      rate: rate.value > 0 ? rate.value : 1, // 确保 rate 至少为 1
-      burst: burst.value,
-      key_type: 'var_combination', // 固定为 var_combination
-      key: key.value,
-      nodelay: nodelay.value,
-      rejected_code: rejectionCode.value,
-      show_limit_quota_header: showLimitQuotaHeader.value,
-      allow_degradation: allowDegradation.value,
-      policy: policy.value
-    }
-    
-    if (rejectionMsg.value) {
-      currentPlugins['limit-req'].rejected_msg = rejectionMsg.value
-    }
-    
-    // Redis 配置
-    if (policy.value === 'redis') {
-      if (redisHost.value) currentPlugins['limit-req'].redis_host = redisHost.value
-      if (redisPort.value) currentPlugins['limit-req'].redis_port = redisPort.value
-      if (redisUsername.value) currentPlugins['limit-req'].redis_username = redisUsername.value
-      if (redisPassword.value) currentPlugins['limit-req'].redis_password = redisPassword.value
-      if (redisSsl.value !== undefined) currentPlugins['limit-req'].redis_ssl = redisSsl.value
-      if (redisSslVerify.value !== undefined) currentPlugins['limit-req'].redis_ssl_verify = redisSslVerify.value
-      if (redisDatabase.value !== undefined) currentPlugins['limit-req'].redis_database = redisDatabase.value
-      if (redisTimeout.value !== undefined) currentPlugins['limit-req'].redis_timeout = redisTimeout.value
-    }
-    
-    // Redis Cluster 配置
-    if (policy.value === 'redis-cluster') {
-      if (redisClusterNodes.value.length > 0) currentPlugins['limit-req'].redis_cluster_nodes = redisClusterNodes.value
-      if (redisClusterName.value) currentPlugins['limit-req'].redis_cluster_name = redisClusterName.value
-      if (redisPassword.value) currentPlugins['limit-req'].redis_password = redisPassword.value
-      if (redisTimeout.value !== undefined) currentPlugins['limit-req'].redis_timeout = redisTimeout.value
-      if (redisClusterSsl.value !== undefined) currentPlugins['limit-req'].redis_cluster_ssl = redisClusterSsl.value
-      if (redisClusterSslVerify.value !== undefined) currentPlugins['limit-req'].redis_cluster_ssl_verify = redisClusterSslVerify.value
-    }
-    
-    setPluginEnabled(currentPlugins['limit-req'], true)
-  } else {
-    currentPlugins['limit-req'] = currentPlugins['limit-req'] || {}
-    setPluginEnabled(currentPlugins['limit-req'], false)
+function buildLimitReqConfig() {
+  const cfg = {
+    rate: rate.value > 0 ? rate.value : 1,
+    burst: burst.value,
+    key_type: 'var_combination',
+    key: key.value,
+    nodelay: nodelay.value,
+    rejected_code: rejectionCode.value,
+    show_limit_quota_header: showLimitQuotaHeader.value,
+    allow_degradation: allowDegradation.value,
+    policy: policy.value
   }
-  
-  updatePlugins(currentPlugins)
-})
-
-const handleEnableChange = (value) => {
-  localEnabled.value = value
+  if (rejectionMsg.value) cfg.rejected_msg = rejectionMsg.value
+  if (policy.value === 'redis') {
+    if (redisHost.value) cfg.redis_host = redisHost.value
+    if (redisPort.value) cfg.redis_port = redisPort.value
+    if (redisUsername.value) cfg.redis_username = redisUsername.value
+    if (redisPassword.value) cfg.redis_password = redisPassword.value
+    if (redisSsl.value !== undefined) cfg.redis_ssl = redisSsl.value
+    if (redisSslVerify.value !== undefined) cfg.redis_ssl_verify = redisSslVerify.value
+    if (redisDatabase.value !== undefined) cfg.redis_database = redisDatabase.value
+    if (redisTimeout.value !== undefined) cfg.redis_timeout = redisTimeout.value
+  }
+  if (policy.value === 'redis-cluster') {
+    if (redisClusterNodes.value.length) cfg.redis_cluster_nodes = redisClusterNodes.value
+    if (redisClusterName.value) cfg.redis_cluster_name = redisClusterName.value
+    if (redisPassword.value) cfg.redis_password = redisPassword.value
+    if (redisTimeout.value !== undefined) cfg.redis_timeout = redisTimeout.value
+    if (redisClusterSsl.value !== undefined) cfg.redis_cluster_ssl = redisClusterSsl.value
+    if (redisClusterSslVerify.value !== undefined) cfg.redis_cluster_ssl_verify = redisClusterSslVerify.value
+  }
+  return cfg
 }
 
-// 更新插件的辅助函数
-const updatePlugin = (updates) => {
-  const currentPlugins = { ...plugins.value }
-  
-  currentPlugins['limit-req'] = {
-    ...limitReqPlugin.value,
-    ...updates,
-    key_type: 'var_combination' // 确保 key_type 始终为 var_combination
-  }
-  setPluginEnabled(currentPlugins['limit-req'], localEnabled.value)
-  
-  updatePlugins(currentPlugins)
+function handleEnableChange(value) {
+  const cfg = value ? buildLimitReqConfig() : { ...config.value }
+  setPluginEnabled(cfg, value)
+  updateConfig(cfg)
+}
+
+function updatePlugin(updates) {
+  const cfg = { ...config.value, ...updates, key_type: 'var_combination' }
+  setPluginEnabled(cfg, enabled.value)
+  updateConfig(cfg)
 }
 
 const handleRateChange = (value) => {
@@ -554,11 +511,10 @@ const handleRejectionMsgChange = (value) => {
   if (value) {
     updatePlugin({ rejected_msg: value })
   } else {
-    const currentPlugins = { ...plugins.value }
-    currentPlugins['limit-req'] = { ...limitReqPlugin.value }
-    delete currentPlugins['limit-req'].rejected_msg
-    setPluginEnabled(currentPlugins['limit-req'], localEnabled.value)
-    updatePlugins(currentPlugins)
+    const cfg = { ...config.value }
+    delete cfg.rejected_msg
+    setPluginEnabled(cfg, enabled.value)
+    updateConfig(cfg)
   }
 }
 

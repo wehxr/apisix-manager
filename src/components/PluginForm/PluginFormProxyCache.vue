@@ -14,9 +14,9 @@
       </template>
     </el-alert>
     <el-form-item label="开启插件">
-      <el-switch :model-value="localEnabled" @update:model-value="handleEnableChange" />
+      <el-switch :model-value="enabled" @update:model-value="handleEnableChange" />
     </el-form-item>
-    <template v-if="localEnabled">
+    <template v-if="enabled">
       <el-form-item label="缓存策略" required>
         <el-radio-group :model-value="cacheStrategy" @update:model-value="handleStrategyChange">
           <el-radio label="disk">磁盘缓存 (disk)</el-radio>
@@ -157,275 +157,102 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { computed, watch } from 'vue'
 import { isPluginEnabled, setPluginEnabled } from '@/utils/plugin'
 import { usePluginConfig } from '@/composables/usePluginConfig'
 
 const props = defineProps({
-  modelValue: {
-    type: Object,
-    default: () => ({
-      plugin_config_id: null
-    })
-  }
+  modelValue: { type: Object, default: () => ({}) },
+  resourceType: { type: String, default: '' }
 })
 
 const emit = defineEmits(['update:modelValue'])
+const { config, updateConfig } = usePluginConfig(props, emit)
 
-// 使用 composable 加载和管理 Plugin Config
-const { plugins, updatePlugins } = usePluginConfig(props, emit)
-
-// 从 plugins 中提取 proxy-cache 配置
-const proxyCachePlugin = computed(() => plugins.value['proxy-cache'] || {})
-
-// 计算 enabled 状态
-const enabled = computed(() => isPluginEnabled(proxyCachePlugin.value))
-
-// 计算各个字段
-const cacheStrategy = computed(() => {
-  return proxyCachePlugin.value.cache_strategy || 'disk'
-})
-
-const cacheZone = computed(() => {
-  return proxyCachePlugin.value.cache_zone || 'disk_cache_one'
-})
-
+const enabled = computed(() => isPluginEnabled(config.value))
+const cacheStrategy = computed(() => config.value.cache_strategy || 'disk')
+const cacheZone = computed(() => config.value.cache_zone || 'disk_cache_one')
 const cacheKey = computed(() => {
-  if (Array.isArray(proxyCachePlugin.value.cache_key) && proxyCachePlugin.value.cache_key.length > 0) {
-    return proxyCachePlugin.value.cache_key
-  }
+  if (Array.isArray(config.value.cache_key) && config.value.cache_key.length > 0) return config.value.cache_key
   return ['$host', '$request_uri']
 })
-
 const cacheMethod = computed(() => {
-  if (Array.isArray(proxyCachePlugin.value.cache_method) && proxyCachePlugin.value.cache_method.length > 0) {
-    return proxyCachePlugin.value.cache_method
-  }
+  if (Array.isArray(config.value.cache_method) && config.value.cache_method.length > 0) return config.value.cache_method
   return ['GET', 'HEAD']
 })
-
 const cacheHttpStatus = computed(() => {
-  if (Array.isArray(proxyCachePlugin.value.cache_http_status) && proxyCachePlugin.value.cache_http_status.length > 0) {
-    return proxyCachePlugin.value.cache_http_status.map(s => {
+  if (Array.isArray(config.value.cache_http_status) && config.value.cache_http_status.length > 0) {
+    return config.value.cache_http_status.map(s => {
       const num = typeof s === 'number' ? s : parseInt(s, 10)
       return isNaN(num) ? 200 : num
     }).filter(s => typeof s === 'number')
   }
   return [200, 301, 404]
 })
+const cacheTtl = computed(() => config.value.cache_ttl !== undefined ? config.value.cache_ttl : 300)
+const hideCacheHeaders = computed(() => config.value.hide_cache_headers !== undefined ? config.value.hide_cache_headers : false)
+const cacheControl = computed(() => config.value.cache_control !== undefined ? config.value.cache_control : false)
+const cacheBypass = computed(() => Array.isArray(config.value.cache_bypass) ? config.value.cache_bypass : [])
+const noCache = computed(() => Array.isArray(config.value.no_cache) ? config.value.no_cache : [])
 
-const cacheTtl = computed(() => {
-  return proxyCachePlugin.value.cache_ttl !== undefined ? proxyCachePlugin.value.cache_ttl : 300
-})
-
-const hideCacheHeaders = computed(() => {
-  return proxyCachePlugin.value.hide_cache_headers !== undefined ? proxyCachePlugin.value.hide_cache_headers : false
-})
-
-const cacheControl = computed(() => {
-  return proxyCachePlugin.value.cache_control !== undefined ? proxyCachePlugin.value.cache_control : false
-})
-
-const cacheBypass = computed(() => {
-  return Array.isArray(proxyCachePlugin.value.cache_bypass) ? proxyCachePlugin.value.cache_bypass : []
-})
-
-const noCache = computed(() => {
-  return Array.isArray(proxyCachePlugin.value.no_cache) ? proxyCachePlugin.value.no_cache : []
-})
-
-// 内部状态
-const localEnabled = ref(enabled.value)
-
-// 监听 props 变化，更新内部状态
-watch(enabled, (newEnabled) => {
-  localEnabled.value = newEnabled
-}, { immediate: true })
-
-// 监听内部状态变化，更新到父组件
-watch(localEnabled, (newEnabled) => {
-  const currentPlugins = { ...plugins.value }
-  
-  if (newEnabled) {
-    currentPlugins['proxy-cache'] = {
-      cache_strategy: cacheStrategy.value,
-      cache_zone: cacheZone.value,
-      cache_key: cacheKey.value,
-      cache_method: cacheMethod.value,
-      cache_http_status: cacheHttpStatus.value,
-      cache_ttl: cacheTtl.value,
-      hide_cache_headers: hideCacheHeaders.value,
-      cache_control: cacheControl.value
-    }
-    // 只有当数组不为空时才添加这些字段
-    if (cacheBypass.value && Array.isArray(cacheBypass.value) && cacheBypass.value.length > 0) {
-      currentPlugins['proxy-cache'].cache_bypass = cacheBypass.value
-    }
-    if (noCache.value && Array.isArray(noCache.value) && noCache.value.length > 0) {
-      currentPlugins['proxy-cache'].no_cache = noCache.value
-    }
-    setPluginEnabled(currentPlugins['proxy-cache'], true)
-  } else {
-    currentPlugins['proxy-cache'] = currentPlugins['proxy-cache'] || {}
-    setPluginEnabled(currentPlugins['proxy-cache'], false)
-  }
-  
-  updatePlugins(currentPlugins)
-})
-
-const handleEnableChange = (value) => {
-  localEnabled.value = value
+function normalizeProxyCacheConfig(pc) {
+  if (!pc || typeof pc !== 'object') return null
+  let changed = false
+  const next = { ...pc }
+  if (Array.isArray(next.cache_bypass) && next.cache_bypass.length === 0) { delete next.cache_bypass; changed = true }
+  if (Array.isArray(next.no_cache) && next.no_cache.length === 0) { delete next.no_cache; changed = true }
+  return changed ? next : null
 }
 
-const handleStrategyChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  currentPlugins['proxy-cache'] = {
-    ...proxyCachePlugin.value,
-    cache_strategy: value
-  }
-  setPluginEnabled(currentPlugins['proxy-cache'], enabled.value)
-  
-  updatePlugins(currentPlugins)
+watch(
+  () => config.value,
+  (pc) => {
+    const normalized = normalizeProxyCacheConfig(pc)
+    if (normalized) updateConfig(normalized)
+  },
+  { immediate: true }
+)
+
+function apply(partial) {
+  const cfg = { ...config.value, ...partial }
+  if ('cache_bypass' in partial && (!Array.isArray(partial.cache_bypass) || partial.cache_bypass.length === 0)) delete cfg.cache_bypass
+  if ('no_cache' in partial && (!Array.isArray(partial.no_cache) || partial.no_cache.length === 0)) delete cfg.no_cache
+  setPluginEnabled(cfg, enabled.value)
+  updateConfig(cfg)
 }
 
-const handleZoneChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  currentPlugins['proxy-cache'] = {
-    ...proxyCachePlugin.value,
-    cache_zone: value
-  }
-  setPluginEnabled(currentPlugins['proxy-cache'], enabled.value)
-  
-  updatePlugins(currentPlugins)
+function handleEnableChange(value) {
+  const cfg = value
+    ? {
+        cache_strategy: cacheStrategy.value,
+        cache_zone: cacheZone.value,
+        cache_key: cacheKey.value,
+        cache_method: cacheMethod.value,
+        cache_http_status: cacheHttpStatus.value,
+        cache_ttl: cacheTtl.value,
+        hide_cache_headers: hideCacheHeaders.value,
+        cache_control: cacheControl.value
+      }
+    : { ...config.value }
+  if (value && cacheBypass.value?.length) cfg.cache_bypass = cacheBypass.value
+  if (value && noCache.value?.length) cfg.no_cache = noCache.value
+  setPluginEnabled(cfg, value)
+  updateConfig(cfg)
 }
 
-const handleCacheKeyChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  // 确保至少有一个默认值，不能为空数组
-  const keyArray = Array.isArray(value) && value.length > 0 ? value : ['$host', '$request_uri']
-  
-  currentPlugins['proxy-cache'] = {
-    ...proxyCachePlugin.value,
-    cache_key: keyArray
-  }
-  setPluginEnabled(currentPlugins['proxy-cache'], enabled.value)
-  
-  updatePlugins(currentPlugins)
+const handleStrategyChange = (v) => apply({ cache_strategy: v })
+const handleZoneChange = (v) => apply({ cache_zone: v })
+const handleCacheKeyChange = (v) => apply({ cache_key: Array.isArray(v) && v.length > 0 ? v : ['$host', '$request_uri'] })
+const handleCacheMethodChange = (v) => apply({ cache_method: Array.isArray(v) && v.length > 0 ? v : ['GET', 'HEAD'] })
+const handleCacheHttpStatusChange = (v) => {
+  const arr = Array.isArray(v) ? v.map((s) => (typeof s === 'number' ? s : parseInt(s, 10))).filter((n) => !isNaN(n)) : []
+  apply({ cache_http_status: arr.length > 0 ? arr : [200, 301, 404] })
 }
-
-const handleCacheMethodChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  // 确保至少有一个默认值，不能为空数组
-  const methodArray = Array.isArray(value) && value.length > 0 ? value : ['GET', 'HEAD']
-  
-  currentPlugins['proxy-cache'] = {
-    ...proxyCachePlugin.value,
-    cache_method: methodArray
-  }
-  setPluginEnabled(currentPlugins['proxy-cache'], enabled.value)
-  
-  updatePlugins(currentPlugins)
-}
-
-const handleCacheHttpStatusChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  // 将字符串数组转换为数字数组，过滤掉无效值
-  const statusArray = Array.isArray(value)
-    ? value.map(s => {
-        const num = typeof s === 'number' ? s : parseInt(s, 10)
-        return isNaN(num) ? null : num
-      }).filter(s => s !== null && s !== undefined && typeof s === 'number')
-    : []
-  
-  currentPlugins['proxy-cache'] = {
-    ...proxyCachePlugin.value,
-    cache_http_status: statusArray.length > 0 ? statusArray : [200, 301, 404]
-  }
-  setPluginEnabled(currentPlugins['proxy-cache'], enabled.value)
-  
-  updatePlugins(currentPlugins)
-}
-
-const handleTtlChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  currentPlugins['proxy-cache'] = {
-    ...proxyCachePlugin.value,
-    cache_ttl: value
-  }
-  setPluginEnabled(currentPlugins['proxy-cache'], enabled.value)
-  
-  updatePlugins(currentPlugins)
-}
-
-const handleHideCacheHeadersChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  currentPlugins['proxy-cache'] = {
-    ...proxyCachePlugin.value,
-    hide_cache_headers: value
-  }
-  setPluginEnabled(currentPlugins['proxy-cache'], enabled.value)
-  
-  updatePlugins(currentPlugins)
-}
-
-const handleCacheControlChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  currentPlugins['proxy-cache'] = {
-    ...proxyCachePlugin.value,
-    cache_control: value
-  }
-  setPluginEnabled(currentPlugins['proxy-cache'], enabled.value)
-  
-  updatePlugins(currentPlugins)
-}
-
-const handleCacheBypassChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  currentPlugins['proxy-cache'] = {
-    ...proxyCachePlugin.value
-  }
-  
-  // 只有当数组不为空时才添加该字段，否则删除该字段
-  const bypassArray = Array.isArray(value) ? value : []
-  if (bypassArray.length > 0) {
-    currentPlugins['proxy-cache'].cache_bypass = bypassArray
-  } else {
-    delete currentPlugins['proxy-cache'].cache_bypass
-  }
-  
-  setPluginEnabled(currentPlugins['proxy-cache'], enabled.value)
-  
-  updatePlugins(currentPlugins)
-}
-
-const handleNoCacheChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  currentPlugins['proxy-cache'] = {
-    ...proxyCachePlugin.value
-  }
-  
-  // 只有当数组不为空时才添加该字段，否则删除该字段
-  const noCacheArray = Array.isArray(value) ? value : []
-  if (noCacheArray.length > 0) {
-    currentPlugins['proxy-cache'].no_cache = noCacheArray
-  } else {
-    delete currentPlugins['proxy-cache'].no_cache
-  }
-  
-  setPluginEnabled(currentPlugins['proxy-cache'], enabled.value)
-  
-  updatePlugins(currentPlugins)
-}
+const handleTtlChange = (v) => apply({ cache_ttl: v })
+const handleHideCacheHeadersChange = (v) => apply({ hide_cache_headers: v })
+const handleCacheControlChange = (v) => apply({ cache_control: v })
+const handleCacheBypassChange = (v) => apply({ cache_bypass: Array.isArray(v) ? v : [] })
+const handleNoCacheChange = (v) => apply({ no_cache: Array.isArray(v) ? v : [] })
 </script>
 
 <style scoped>

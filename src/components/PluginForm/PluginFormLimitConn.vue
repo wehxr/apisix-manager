@@ -15,9 +15,9 @@
     </el-alert>
     <el-divider>配置</el-divider>
     <el-form-item label="开启插件">
-      <el-switch :model-value="localEnabled" @update:model-value="handleEnableChange" />
+      <el-switch :model-value="enabled" @update:model-value="handleEnableChange" />
     </el-form-item>
-    <template v-if="localEnabled">
+    <template v-if="enabled">
       <el-form-item label="最大并发连接数（conn）" required>
         <el-input-number
           :model-value="conn"
@@ -337,202 +337,162 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { computed } from 'vue'
 import { isPluginEnabled, setPluginEnabled } from '@/utils/plugin'
 import { usePluginConfig } from '@/composables/usePluginConfig'
 
 const props = defineProps({
-  modelValue: {
-    type: Object,
-    default: () => ({
-      plugin_config_id: null
-    })
-  }
+  modelValue: { type: Object, default: () => ({}) },
+  resourceType: { type: String, default: '' }
 })
 
 const emit = defineEmits(['update:modelValue'])
 
 // 使用 composable 加载和管理 Plugin Config
-const { plugins, updatePlugins } = usePluginConfig(props, emit)
+const { config, updateConfig } = usePluginConfig(props, emit)
 
-// 从 plugins 中提取 limit-conn 配置
-const limitConnPlugin = computed(() => plugins.value['limit-conn'] || {})
-
-// 计算 enabled 状态
-const enabled = computed(() => isPluginEnabled(limitConnPlugin.value))
+const enabled = computed(() => isPluginEnabled(config.value))
 
 // 计算各个字段
 const conn = computed(() => {
-  return limitConnPlugin.value.conn !== undefined ? limitConnPlugin.value.conn : 1
+  return config.value.conn !== undefined ? config.value.conn : 1
 })
 
 const burst = computed(() => {
-  return limitConnPlugin.value.burst !== undefined ? limitConnPlugin.value.burst : 0
+  return config.value.burst !== undefined ? config.value.burst : 0
 })
 
 const defaultConnDelay = computed(() => {
-  return limitConnPlugin.value.default_conn_delay !== undefined ? limitConnPlugin.value.default_conn_delay : 1
+  return config.value.default_conn_delay !== undefined ? config.value.default_conn_delay : 1
 })
 
 const onlyUseDefaultDelay = computed(() => {
-  return limitConnPlugin.value.only_use_default_delay !== undefined ? limitConnPlugin.value.only_use_default_delay : false
+  return config.value.only_use_default_delay !== undefined ? config.value.only_use_default_delay : false
 })
 
 // key_type 固定为 'var_combination'，不在表单上显示
 const keyType = computed(() => 'var_combination')
 
 const key = computed(() => {
-  return limitConnPlugin.value.key !== undefined ? limitConnPlugin.value.key : '$remote_addr'
+  return config.value.key !== undefined ? config.value.key : '$remote_addr'
 })
 
 const rejectionCode = computed(() => {
   // 兼容旧配置中的 rejection_code，但优先使用 rejected_code
-  return limitConnPlugin.value.rejection_code !== undefined 
-    ? limitConnPlugin.value.rejection_code 
-    : (limitConnPlugin.value.rejected_code !== undefined ? limitConnPlugin.value.rejected_code : 429)
+  return config.value.rejection_code !== undefined 
+    ? config.value.rejection_code 
+    : (config.value.rejected_code !== undefined ? config.value.rejected_code : 429)
 })
 
 const rejectionMsg = computed(() => {
   // 兼容旧配置中的 rejection_msg，但优先使用 rejected_msg
-  return limitConnPlugin.value.rejection_msg !== undefined 
-    ? limitConnPlugin.value.rejection_msg 
-    : (limitConnPlugin.value.rejection_msg !== undefined ? limitConnPlugin.value.rejection_msg : '请求过于频繁，请稍后再试')
+  return config.value.rejection_msg !== undefined 
+    ? config.value.rejection_msg 
+    : (config.value.rejection_msg !== undefined ? config.value.rejection_msg : '请求过于频繁，请稍后再试')
 })
 
 const allowDegradation = computed(() => {
-  return limitConnPlugin.value.allow_degradation !== undefined ? limitConnPlugin.value.allow_degradation : false
+  return config.value.allow_degradation !== undefined ? config.value.allow_degradation : false
 })
 
 const policy = computed(() => {
-  return limitConnPlugin.value.policy || 'local'
+  return config.value.policy || 'local'
 })
 
 const redisHost = computed(() => {
-  return limitConnPlugin.value.redis_host || ''
+  return config.value.redis_host || ''
 })
 
 const redisPort = computed(() => {
-  return limitConnPlugin.value.redis_port !== undefined ? limitConnPlugin.value.redis_port : 6379
+  return config.value.redis_port !== undefined ? config.value.redis_port : 6379
 })
 
 const redisUsername = computed(() => {
-  return limitConnPlugin.value.redis_username || ''
+  return config.value.redis_username || ''
 })
 
 const redisPassword = computed(() => {
-  return limitConnPlugin.value.redis_password || ''
+  return config.value.redis_password || ''
 })
 
 const redisSsl = computed(() => {
-  return limitConnPlugin.value.redis_ssl !== undefined ? limitConnPlugin.value.redis_ssl : false
+  return config.value.redis_ssl !== undefined ? config.value.redis_ssl : false
 })
 
 const redisSslVerify = computed(() => {
-  return limitConnPlugin.value.redis_ssl_verify !== undefined ? limitConnPlugin.value.redis_ssl_verify : false
+  return config.value.redis_ssl_verify !== undefined ? config.value.redis_ssl_verify : false
 })
 
 const redisDatabase = computed(() => {
-  return limitConnPlugin.value.redis_database !== undefined ? limitConnPlugin.value.redis_database : 0
+  return config.value.redis_database !== undefined ? config.value.redis_database : 0
 })
 
 const redisTimeout = computed(() => {
-  return limitConnPlugin.value.redis_timeout !== undefined ? limitConnPlugin.value.redis_timeout : 1000
+  return config.value.redis_timeout !== undefined ? config.value.redis_timeout : 1000
 })
 
 const redisClusterNodes = computed(() => {
-  return Array.isArray(limitConnPlugin.value.redis_cluster_nodes) 
-    ? limitConnPlugin.value.redis_cluster_nodes 
+  return Array.isArray(config.value.redis_cluster_nodes) 
+    ? config.value.redis_cluster_nodes 
     : []
 })
 
 const redisClusterName = computed(() => {
-  return limitConnPlugin.value.redis_cluster_name || ''
+  return config.value.redis_cluster_name || ''
 })
 
 const redisClusterSsl = computed(() => {
-  return limitConnPlugin.value.redis_cluster_ssl !== undefined ? limitConnPlugin.value.redis_cluster_ssl : false
+  return config.value.redis_cluster_ssl !== undefined ? config.value.redis_cluster_ssl : false
 })
 
 const redisClusterSslVerify = computed(() => {
-  return limitConnPlugin.value.redis_cluster_ssl_verify !== undefined ? limitConnPlugin.value.redis_cluster_ssl_verify : false
+  return config.value.redis_cluster_ssl_verify !== undefined ? config.value.redis_cluster_ssl_verify : false
 })
 
-// 内部状态
-const localEnabled = ref(enabled.value)
-
-// 监听 props 变化，更新内部状态
-watch(enabled, (newEnabled) => {
-  localEnabled.value = newEnabled
-}, { immediate: true })
-
-// 监听内部状态变化，更新到父组件
-watch(localEnabled, (newEnabled) => {
-  const currentPlugins = { ...plugins.value }
-  
-  if (newEnabled) {
-    currentPlugins['limit-conn'] = {
-      conn: conn.value > 0 ? conn.value : 1,
-      burst: burst.value,
-      default_conn_delay: defaultConnDelay.value > 0 ? defaultConnDelay.value : 1,
-      only_use_default_delay: onlyUseDefaultDelay.value,
-      key_type: 'var_combination', // 固定为 var_combination
-      key: key.value,
-      rejection_code: rejectionCode.value,
-      allow_degradation: allowDegradation.value,
-      policy: policy.value
-    }
-    
-    if (rejectionMsg.value) {
-      currentPlugins['limit-conn'].rejection_msg = rejectionMsg.value
-    }
-    
-    // Redis 配置
-    if (policy.value === 'redis') {
-      if (redisHost.value) currentPlugins['limit-conn'].redis_host = redisHost.value
-      if (redisPort.value) currentPlugins['limit-conn'].redis_port = redisPort.value
-      if (redisUsername.value) currentPlugins['limit-conn'].redis_username = redisUsername.value
-      if (redisPassword.value) currentPlugins['limit-conn'].redis_password = redisPassword.value
-      if (redisSsl.value !== undefined) currentPlugins['limit-conn'].redis_ssl = redisSsl.value
-      if (redisSslVerify.value !== undefined) currentPlugins['limit-conn'].redis_ssl_verify = redisSslVerify.value
-      if (redisDatabase.value !== undefined) currentPlugins['limit-conn'].redis_database = redisDatabase.value
-      if (redisTimeout.value !== undefined) currentPlugins['limit-conn'].redis_timeout = redisTimeout.value
-    }
-    
-    // Redis Cluster 配置
-    if (policy.value === 'redis-cluster') {
-      if (redisClusterNodes.value.length > 0) currentPlugins['limit-conn'].redis_cluster_nodes = redisClusterNodes.value
-      if (redisClusterName.value) currentPlugins['limit-conn'].redis_cluster_name = redisClusterName.value
-      if (redisPassword.value) currentPlugins['limit-conn'].redis_password = redisPassword.value
-      if (redisTimeout.value !== undefined) currentPlugins['limit-conn'].redis_timeout = redisTimeout.value
-      if (redisClusterSsl.value !== undefined) currentPlugins['limit-conn'].redis_cluster_ssl = redisClusterSsl.value
-      if (redisClusterSslVerify.value !== undefined) currentPlugins['limit-conn'].redis_cluster_ssl_verify = redisClusterSslVerify.value
-    }
-    
-    setPluginEnabled(currentPlugins['limit-conn'], true)
-  } else {
-    currentPlugins['limit-conn'] = currentPlugins['limit-conn'] || {}
-    setPluginEnabled(currentPlugins['limit-conn'], false)
+function buildLimitConnConfig() {
+  const cfg = {
+    conn: conn.value > 0 ? conn.value : 1,
+    burst: burst.value,
+    default_conn_delay: defaultConnDelay.value > 0 ? defaultConnDelay.value : 1,
+    only_use_default_delay: onlyUseDefaultDelay.value,
+    key_type: 'var_combination',
+    key: key.value,
+    rejection_code: rejectionCode.value,
+    allow_degradation: allowDegradation.value,
+    policy: policy.value
   }
-  
-  updatePlugins(currentPlugins)
-})
-
-const handleEnableChange = (value) => {
-  localEnabled.value = value
+  if (rejectionMsg.value) cfg.rejection_msg = rejectionMsg.value
+  if (policy.value === 'redis') {
+    if (redisHost.value) cfg.redis_host = redisHost.value
+    if (redisPort.value) cfg.redis_port = redisPort.value
+    if (redisUsername.value) cfg.redis_username = redisUsername.value
+    if (redisPassword.value) cfg.redis_password = redisPassword.value
+    if (redisSsl.value !== undefined) cfg.redis_ssl = redisSsl.value
+    if (redisSslVerify.value !== undefined) cfg.redis_ssl_verify = redisSslVerify.value
+    if (redisDatabase.value !== undefined) cfg.redis_database = redisDatabase.value
+    if (redisTimeout.value !== undefined) cfg.redis_timeout = redisTimeout.value
+  }
+  if (policy.value === 'redis-cluster') {
+    if (redisClusterNodes.value.length) cfg.redis_cluster_nodes = redisClusterNodes.value
+    if (redisClusterName.value) cfg.redis_cluster_name = redisClusterName.value
+    if (redisPassword.value) cfg.redis_password = redisPassword.value
+    if (redisTimeout.value !== undefined) cfg.redis_timeout = redisTimeout.value
+    if (redisClusterSsl.value !== undefined) cfg.redis_cluster_ssl = redisClusterSsl.value
+    if (redisClusterSslVerify.value !== undefined) cfg.redis_cluster_ssl_verify = redisClusterSslVerify.value
+  }
+  return cfg
 }
 
-// 更新插件的辅助函数
+function handleEnableChange(value) {
+  const cfg = value ? buildLimitConnConfig() : { ...config.value }
+  setPluginEnabled(cfg, value)
+  updateConfig(cfg)
+}
+
 const updatePlugin = (updates) => {
-  const currentPlugins = { ...plugins.value }
-  
-  currentPlugins['limit-conn'] = {
-    ...limitConnPlugin.value,
-    ...updates,
-    key_type: 'var_combination' // 确保 key_type 始终为 var_combination
-  }
-  setPluginEnabled(currentPlugins['limit-conn'], enabled.value)
-  
-  updatePlugins(currentPlugins)
+  const cfg = { ...config.value, ...updates, key_type: 'var_combination' }
+  setPluginEnabled(cfg, enabled.value)
+  updateConfig(cfg)
 }
 
 const handleConnChange = (value) => {
@@ -560,14 +520,11 @@ const handleRejectionCodeChange = (value) => {
 }
 
 const handleRejectionMsgChange = (value) => {
-  if (value) {
-    updatePlugin({ rejection_msg: value })
-  } else {
-    const currentPlugins = { ...plugins.value }
-    currentPlugins['limit-conn'] = { ...limitConnPlugin.value }
-    delete currentPlugins['limit-conn'].rejection_msg
-    setPluginEnabled(currentPlugins['limit-conn'], enabled.value)
-    updatePlugins(currentPlugins)
+  if (value) updatePlugin({ rejection_msg: value })
+  else {
+    const cfg = { ...config.value }; delete cfg.rejection_msg
+    setPluginEnabled(cfg, enabled.value)
+    updateConfig(cfg)
   }
 }
 
@@ -588,26 +545,20 @@ const handleRedisPortChange = (value) => {
 }
 
 const handleRedisUsernameChange = (value) => {
-  if (value) {
-    updatePlugin({ redis_username: value })
-  } else {
-    const currentPlugins = { ...plugins.value }
-    currentPlugins['limit-conn'] = { ...limitConnPlugin.value }
-    delete currentPlugins['limit-conn'].redis_username
-    setPluginEnabled(currentPlugins['limit-conn'], enabled.value)
-    updatePlugins(currentPlugins)
+  if (value) updatePlugin({ redis_username: value })
+  else {
+    const cfg = { ...config.value }; delete cfg.redis_username
+    setPluginEnabled(cfg, enabled.value)
+    updateConfig(cfg)
   }
 }
 
 const handleRedisPasswordChange = (value) => {
-  if (value) {
-    updatePlugin({ redis_password: value })
-  } else {
-    const currentPlugins = { ...plugins.value }
-    currentPlugins['limit-conn'] = { ...limitConnPlugin.value }
-    delete currentPlugins['limit-conn'].redis_password
-    setPluginEnabled(currentPlugins['limit-conn'], enabled.value)
-    updatePlugins(currentPlugins)
+  if (value) updatePlugin({ redis_password: value })
+  else {
+    const cfg = { ...config.value }; delete cfg.redis_password
+    setPluginEnabled(cfg, enabled.value)
+    updateConfig(cfg)
   }
 }
 
@@ -632,14 +583,11 @@ const handleRedisClusterNodesChange = (value) => {
 }
 
 const handleRedisClusterNameChange = (value) => {
-  if (value) {
-    updatePlugin({ redis_cluster_name: value })
-  } else {
-    const currentPlugins = { ...plugins.value }
-    currentPlugins['limit-conn'] = { ...limitConnPlugin.value }
-    delete currentPlugins['limit-conn'].redis_cluster_name
-    setPluginEnabled(currentPlugins['limit-conn'], enabled.value)
-    updatePlugins(currentPlugins)
+  if (value) updatePlugin({ redis_cluster_name: value })
+  else {
+    const cfg = { ...config.value }; delete cfg.redis_cluster_name
+    setPluginEnabled(cfg, enabled.value)
+    updateConfig(cfg)
   }
 }
 

@@ -188,7 +188,6 @@
       resource-type="consumer"
       :resource-id="currentConsumerId"
       :plugin-type="currentPluginType"
-      :initial-config="{ plugins: currentConsumerPlugins || {} }"
       @saved="handlePluginSaved"
     />
   </div>
@@ -231,7 +230,6 @@ const loadingGroups = ref(false)
 const pluginDialogVisible = ref(false)
 const currentConsumerId = ref('')
 const currentPluginType = ref('')
-const currentConsumerPlugins = ref({})
 
 // 过滤条件
 const filterLabel = ref('')
@@ -458,10 +456,8 @@ const handleConfigPlugin = async (row, pluginType) => {
     await nextTick()
   }
   
-  // 设置所有必要的值
   currentConsumerId.value = row.username
   currentPluginType.value = pluginType
-  currentConsumerPlugins.value = row.plugins || {}
   
   // 等待一个 tick 确保响应式更新完成
   await nextTick()

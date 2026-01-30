@@ -14,9 +14,9 @@
       </template>
     </el-alert>
     <el-form-item label="开启插件">
-      <el-switch :model-value="localEnabled" @update:model-value="handleEnableChange" />
+      <el-switch :model-value="enabled" @update:model-value="handleEnableChange" />
     </el-form-item>
-    <template v-if="localEnabled">
+    <template v-if="enabled">
       <el-form-item label="Header 名称">
         <el-input
           :model-value="headerName"
@@ -69,173 +69,72 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { computed } from 'vue'
 import { isPluginEnabled, setPluginEnabled } from '@/utils/plugin'
 import { usePluginConfig } from '@/composables/usePluginConfig'
 
 const props = defineProps({
-  modelValue: {
-    type: Object,
-    default: () => ({
-      plugin_config_id: null
-    })
-  }
+  modelValue: { type: Object, default: () => ({}) },
+  resourceType: { type: String, default: '' }
 })
 
 const emit = defineEmits(['update:modelValue'])
+const { config, updateConfig } = usePluginConfig(props, emit)
 
-// 使用 composable 加载和管理 Plugin Config
-const { plugins, updatePlugins } = usePluginConfig(props, emit)
+const enabled = computed(() => isPluginEnabled(config.value))
+const headerName = computed(() => config.value.header_name ?? 'X-Request-Id')
+const includeInResponse = computed(() => config.value.include_in_response ?? true)
+const algorithm = computed(() => config.value.algorithm ?? 'uuid')
+const rangeIdCharSet = computed(() => config.value.range_id?.char_set ?? 'abcdefghijklmnopqrstuvwxyzABCDEFGHIGKLMNOPQRSTUVWXYZ0123456789')
+const rangeIdLength = computed(() => config.value.range_id?.length ?? 16)
 
-// 从 plugins 中提取 request-id 配置
-const requestIdPlugin = computed(() => plugins.value['request-id'] || {})
-
-// 计算 enabled 状态
-const enabled = computed(() => isPluginEnabled(requestIdPlugin.value))
-
-// 计算各个配置项
-const headerName = computed(() => {
-  if (!enabled.value) return 'X-Request-Id'
-  return requestIdPlugin.value.header_name ?? 'X-Request-Id'
-})
-
-const includeInResponse = computed(() => {
-  if (!enabled.value) return true
-  return requestIdPlugin.value.include_in_response ?? true
-})
-
-const algorithm = computed(() => {
-  if (!enabled.value) return 'uuid'
-  return requestIdPlugin.value.algorithm ?? 'uuid'
-})
-
-const rangeIdCharSet = computed(() => {
-  if (!enabled.value || algorithm.value !== 'range_id') return 'abcdefghijklmnopqrstuvwxyzABCDEFGHIGKLMNOPQRSTUVWXYZ0123456789'
-  return requestIdPlugin.value.range_id?.char_set ?? 'abcdefghijklmnopqrstuvwxyzABCDEFGHIGKLMNOPQRSTUVWXYZ0123456789'
-})
-
-const rangeIdLength = computed(() => {
-  if (!enabled.value || algorithm.value !== 'range_id') return 16
-  return requestIdPlugin.value.range_id?.length ?? 16
-})
-
-// 内部状态
-const localEnabled = ref(enabled.value)
-
-// 监听 props 变化，更新内部状态
-watch(enabled, (newEnabled) => {
-  localEnabled.value = newEnabled
-}, { immediate: true })
-
-// 监听内部状态变化，更新到父组件
-watch(localEnabled, (newEnabled) => {
-  const currentPlugins = { ...plugins.value }
-  
-  if (newEnabled) {
-    currentPlugins['request-id'] = {
-      header_name: headerName.value,
-      include_in_response: includeInResponse.value,
-      algorithm: algorithm.value
-    }
-    
-    if (algorithm.value === 'range_id') {
-      currentPlugins['request-id'].range_id = {
-        char_set: rangeIdCharSet.value,
-        length: rangeIdLength.value
-      }
-    }
-    
-    setPluginEnabled(currentPlugins['request-id'], true)
-  } else {
-    currentPlugins['request-id'] = currentPlugins['request-id'] || {}
-    setPluginEnabled(currentPlugins['request-id'], false)
+function buildConfig(overrides = {}) {
+  const cfg = {
+    header_name: headerName.value,
+    include_in_response: includeInResponse.value,
+    algorithm: algorithm.value,
+    ...overrides
   }
-  
-  updatePlugins(currentPlugins)
-})
-
-const handleEnableChange = (value) => {
-  localEnabled.value = value
-}
-
-const handleHeaderNameChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  currentPlugins['request-id'] = {
-    ...requestIdPlugin.value,
-    header_name: value || 'X-Request-Id'
-  }
-  setPluginEnabled(currentPlugins['request-id'], enabled.value)
-  
-  updatePlugins(currentPlugins)
-}
-
-const handleIncludeInResponseChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  currentPlugins['request-id'] = {
-    ...requestIdPlugin.value,
-    include_in_response: value
-  }
-  setPluginEnabled(currentPlugins['request-id'], enabled.value)
-  
-  updatePlugins(currentPlugins)
-}
-
-const handleAlgorithmChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  const newConfig = {
-    ...requestIdPlugin.value,
-    algorithm: value
-  }
-  
-  // 如果切换到 range_id，添加 range_id 配置
-  if (value === 'range_id') {
-    newConfig.range_id = {
+  if (cfg.algorithm === 'range_id') {
+    cfg.range_id = {
       char_set: rangeIdCharSet.value,
       length: rangeIdLength.value
     }
-  } else {
-    // 如果切换到其他算法，删除 range_id 配置
-    delete newConfig.range_id
   }
-  
-  currentPlugins['request-id'] = newConfig
-  setPluginEnabled(currentPlugins['request-id'], enabled.value)
-  
-  updatePlugins(currentPlugins)
+  return cfg
 }
 
-const handleRangeIdCharSetChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  currentPlugins['request-id'] = {
-    ...requestIdPlugin.value,
-    range_id: {
-      ...(requestIdPlugin.value.range_id || {}),
-      char_set: value || 'abcdefghijklmnopqrstuvwxyzABCDEFGHIGKLMNOPQRSTUVWXYZ0123456789'
-    }
-  }
-  setPluginEnabled(currentPlugins['request-id'], enabled.value)
-  
-  updatePlugins(currentPlugins)
+function handleEnableChange(value) {
+  const cfg = value ? { ...config.value, ...buildConfig() } : { ...config.value }
+  setPluginEnabled(cfg, value)
+  updateConfig(cfg)
 }
 
-const handleRangeIdLengthChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  currentPlugins['request-id'] = {
-    ...requestIdPlugin.value,
-    range_id: {
-      ...(requestIdPlugin.value.range_id || {}),
-      length: value || 16
+function apply(partial) {
+  const cfg = { ...config.value, ...partial }
+  if (partial.algorithm && partial.algorithm !== 'range_id') {
+    delete cfg.range_id
+  } else if (cfg.algorithm === 'range_id') {
+    const prev = cfg.range_id || {}
+    cfg.range_id = {
+      char_set: prev.char_set ?? rangeIdCharSet.value,
+      length: prev.length ?? rangeIdLength.value,
+      ...(partial.range_id || {})
     }
   }
-  setPluginEnabled(currentPlugins['request-id'], enabled.value)
-  
-  updatePlugins(currentPlugins)
+  setPluginEnabled(cfg, enabled.value)
+  updateConfig(cfg)
 }
+
+const handleHeaderNameChange = (v) => apply({ header_name: v || 'X-Request-Id' })
+const handleIncludeInResponseChange = (v) => apply({ include_in_response: v })
+const handleAlgorithmChange = (v) => apply({ algorithm: v })
+const handleRangeIdCharSetChange = (v) => apply({
+  range_id: { ...(config.value.range_id || {}), char_set: v || 'abcdefghijklmnopqrstuvwxyzABCDEFGHIGKLMNOPQRSTUVWXYZ0123456789' }
+})
+const handleRangeIdLengthChange = (v) => apply({
+  range_id: { ...(config.value.range_id || {}), length: v ?? 16 }
+})
 </script>
 
 <style scoped>
@@ -243,7 +142,7 @@ const handleRangeIdLengthChange = (value) => {
   font-size: 12px;
   color: #909399;
   margin-top: 5px;
-  display: block; 
+  display: block;
   width: 100%;
 }
 </style>

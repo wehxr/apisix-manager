@@ -61,7 +61,6 @@
       resource-type="global_rule"
       :resource-id="currentGlobalRuleId"
       :plugin-type="currentPluginType"
-      :initial-config="{ plugins: currentGlobalRulePlugins || {} }"
       @saved="handlePluginSaved"
     />
   </div>
@@ -82,7 +81,6 @@ const globalRuleList = ref([])
 const pluginDialogVisible = ref(false)
 const currentGlobalRuleId = ref('')
 const currentPluginType = ref('')
-const currentGlobalRulePlugins = ref({})
 
 // 获取可用于 global_rule 的插件列表
 const availablePlugins = computed(() => {
@@ -170,23 +168,14 @@ const handleAddPlugin = async (pluginType) => {
   
   try {
     const globalRuleId = await getOrCreateGlobalRuleId()
-    const currentRule = globalRuleList.value.find(r => r.id === globalRuleId) || { plugins: {} }
     
-    // 先关闭对话框（如果已打开），确保状态重置
     if (pluginDialogVisible.value) {
       pluginDialogVisible.value = false
       await nextTick()
     }
-    
-    // 设置所有必要的值
     currentGlobalRuleId.value = globalRuleId
     currentPluginType.value = pluginType
-    currentGlobalRulePlugins.value = currentRule.plugins || {}
-    
-    // 等待一个 tick 确保响应式更新完成
     await nextTick()
-    
-    // 打开对话框
     pluginDialogVisible.value = true
   } catch (error) {
     ElMessage.error('添加插件失败')
@@ -195,22 +184,13 @@ const handleAddPlugin = async (pluginType) => {
 
 // 处理编辑插件
 const handleEditPlugin = async (row) => {
-  // 先关闭对话框（如果已打开），确保状态重置
   if (pluginDialogVisible.value) {
     pluginDialogVisible.value = false
     await nextTick()
   }
-  
-  // 设置所有必要的值
   currentGlobalRuleId.value = row.globalRuleId
   currentPluginType.value = row.type
-  const currentRule = globalRuleList.value.find(r => r.id === row.globalRuleId)
-  currentGlobalRulePlugins.value = currentRule?.plugins || {}
-  
-  // 等待一个 tick 确保响应式更新完成
   await nextTick()
-  
-  // 打开对话框
   pluginDialogVisible.value = true
 }
 
@@ -234,14 +214,10 @@ const handleDeletePlugin = async (row) => {
       return
     }
     
-    // 从 plugins 中删除该插件
     const updatedPlugins = { ...currentRule.plugins }
     delete updatedPlugins[row.type]
-    
-    // 更新全局规则
-    await globalRuleApi.update(globalRuleId, {
-      plugins: updatedPlugins
-    })
+    const { update_time, create_time, ...rest } = currentRule
+    await globalRuleApi.update(globalRuleId, { ...rest, plugins: updatedPlugins })
     
     ElMessage.success('删除成功')
     await loadData()

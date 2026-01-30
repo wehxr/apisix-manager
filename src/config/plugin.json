@@ -9,11 +9,15 @@
   },
   "basic-auth": {
     "name": "基本认证",
-    "resources": ["consumer"]
+    "resources": ["consumer", "consumer_group"]
+  },
+  "ldap-auth": {
+    "name": "LDAP 认证",
+    "resources": ["consumer", "route"]
   },
   "ip-restriction": {
     "name": "IP 限制",
-    "resources": ["route", "consumer"]
+    "resources": ["route", "consumer", "consumer_group"]
   },
   "cors": {
     "name": "跨域策略",
@@ -53,15 +57,15 @@
   },
   "limit-req": {
     "name": "请求速率限流",
-    "resources": ["route", "consumer"]
+    "resources": ["route", "consumer", "consumer_group"]
   },
   "limit-count": {
     "name": "请求数限流",
-    "resources": ["route", "consumer"]
+    "resources": ["route", "consumer", "consumer_group"]
   },
   "limit-conn": {
     "name": "并发连接数限制",
-    "resources": ["route", "consumer"]
+    "resources": ["route", "consumer", "consumer_group"]
   },
   "file-logger": {
     "name": "文件日志",

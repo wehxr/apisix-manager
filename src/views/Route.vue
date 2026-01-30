@@ -244,9 +244,8 @@
     <PluginDialog
       v-model="pluginDialogVisible"
       resource-type="route"
-      :resource-id="currentRouteId"
+      :resource-id="currentResourceId"
       :plugin-type="currentPluginType"
-      :initial-config="{ plugin_config_id: currentPluginConfigId }"
       @saved="handlePluginSaved"
     />
   </div>
@@ -285,9 +284,9 @@ const dialogVisible = ref(false)
 const dialogTitle = ref('创建路由')
 const formRef = ref(null)
 const pluginDialogVisible = ref(false)
-const currentRouteId = ref('')
 const currentPluginType = ref('')
-const currentPluginConfigId = ref(null)
+/** route 场景：传 plugin_config_id（创建路由时已自动生成） */
+const currentResourceId = ref('')
 
 // 过滤条件
 const filterName = ref('')
@@ -372,15 +371,13 @@ const handleConfigPlugin = async (row, pluginType) => {
     await nextTick()
   }
   
-  // 设置所有必要的值
-  currentRouteId.value = row.id
-  currentPluginConfigId.value = row.plugin_config_id || null
+  if (!row.plugin_config_id) {
+    ElMessage.warning('该路由暂无插件配置')
+    return
+  }
+  currentResourceId.value = row.plugin_config_id
   currentPluginType.value = pluginType
-  
-  // 等待一个 tick 确保响应式更新完成
   await nextTick()
-  
-  // 打开对话框
   pluginDialogVisible.value = true
 }
 
@@ -696,24 +693,10 @@ const handleSubmit = async () => {
       }
 
       if (dialogTitle.value === '创建路由') {
+        const pluginConfigId = generateId('plugin_config')
+        await pluginConfigApi.create(pluginConfigId, { plugins: {} })
+        routeData.plugin_config_id = pluginConfigId
         await routeApi.create(form.value.id, routeData)
-        
-        // 创建路由后，默认创建一个空的 Plugin Config
-        try {
-          const pluginConfigId = generateId('plugin_config')
-          await pluginConfigApi.create(pluginConfigId, {
-            plugins: {}
-          })
-          
-          // 更新路由，关联 plugin_config_id
-          const updateRouteData = { ...routeData }
-          updateRouteData.plugin_config_id = pluginConfigId
-          await routeApi.update(form.value.id, updateRouteData)
-        } catch (error) {
-          // 如果创建 Plugin Config 失败，不影响路由创建，只记录错误
-          console.warn('创建默认 Plugin Config 失败:', error)
-        }
-        
         ElMessage.success('创建成功')
       } else {
         await routeApi.update(form.value.id, routeData)

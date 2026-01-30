@@ -14,9 +14,9 @@
       </template>
     </el-alert>
     <el-form-item label="开启插件">
-      <el-switch :model-value="localEnabled" @update:model-value="handleEnableChange" />
+      <el-switch :model-value="enabled" @update:model-value="handleEnableChange" />
     </el-form-item>
-    <template v-if="localEnabled">
+    <template v-if="enabled">
       <el-form-item label="IP 来源" required>
         <el-select
           :model-value="source"
@@ -35,12 +35,10 @@
           • <strong>arg_realip</strong>：从 URL 查询参数 realip 获取，如 /api?realip=1.2.3.4:8080
         </div>
       </el-form-item>
-      
       <el-form-item label="可信地址列表">
         <el-input
           :model-value="trustedAddressesInput"
           @update:model-value="handleTrustedAddressesInput"
-          @blur="handleTrustedAddressesBlur"
           type="textarea"
           :rows="4"
           placeholder="每行一个 IP 或 CIDR，如:&#10;127.0.0.1&#10;192.168.1.0/24&#10;10.0.0.0/8"
@@ -50,7 +48,6 @@
           格式：每行一个 IP 地址或 CIDR 网段，如：127.0.0.1、192.168.1.0/24、10.0.0.0/8
         </div>
       </el-form-item>
-      
       <el-form-item label="递归查找">
         <el-switch
           :model-value="recursive"
@@ -67,179 +64,65 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { computed } from 'vue'
 import { isPluginEnabled, setPluginEnabled } from '@/utils/plugin'
 import { usePluginConfig } from '@/composables/usePluginConfig'
 
 const props = defineProps({
-  modelValue: {
-    type: Object,
-    default: () => ({
-      plugin_config_id: null
-    })
-  }
+  modelValue: { type: Object, default: () => ({}) },
+  resourceType: { type: String, default: '' }
 })
 
 const emit = defineEmits(['update:modelValue'])
+const { config, updateConfig } = usePluginConfig(props, emit)
 
-// 使用 composable 加载和管理 Plugin Config
-const { plugins, updatePlugins } = usePluginConfig(props, emit)
-
-// 从 plugins 中提取 real-ip 配置
-const realIpPlugin = computed(() => plugins.value['real-ip'] || {})
-
-// 计算 enabled 状态
-const enabled = computed(() => isPluginEnabled(realIpPlugin.value))
-
-// 计算 source
-const source = computed(() => {
-  if (!enabled.value) return ''
-  return realIpPlugin.value.source || 'http_x_forwarded_for'
-})
-
-// 计算 trusted_addresses
-const trustedAddresses = computed(() => {
-  if (!enabled.value) return []
-  return Array.isArray(realIpPlugin.value.trusted_addresses) 
-    ? realIpPlugin.value.trusted_addresses 
+const enabled = computed(() => isPluginEnabled(config.value))
+const source = computed(() => config.value.source || 'http_x_forwarded_for')
+const trustedAddresses = computed(() =>
+  Array.isArray(config.value.trusted_addresses)
+    ? config.value.trusted_addresses
     : []
+)
+const recursive = computed(() => config.value.recursive !== undefined ? config.value.recursive : false)
+
+const trustedAddressesInput = computed({
+  get: () => trustedAddresses.value.join('\n'),
+  set: (v) => {
+    const arr = (v || '')
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    apply({ trusted_addresses: arr.length ? arr : undefined })
+  }
 })
 
-// 计算 recursive
-const recursive = computed(() => {
-  if (!enabled.value) return false
-  return realIpPlugin.value.recursive !== undefined ? realIpPlugin.value.recursive : false
-})
-
-// 内部状态
-const localEnabled = ref(enabled.value)
-const trustedAddressesInput = ref('')
-
-// 初始化可信地址输入
-if (trustedAddresses.value.length > 0) {
-  trustedAddressesInput.value = trustedAddresses.value.join('\n')
+function apply(partial) {
+  const cfg = { ...config.value, ...partial }
+  if ('trusted_addresses' in partial && partial.trusted_addresses === undefined) {
+    delete cfg.trusted_addresses
+  }
+  setPluginEnabled(cfg, enabled.value)
+  updateConfig(cfg)
 }
 
-// 监听 props 变化，更新内部状态
-watch([enabled, trustedAddresses], ([newEnabled, newTrustedAddresses]) => {
-  localEnabled.value = newEnabled
-  if (newTrustedAddresses && newTrustedAddresses.length > 0) {
-    trustedAddressesInput.value = newTrustedAddresses.join('\n')
-  } else {
-    trustedAddressesInput.value = ''
-  }
-}, { immediate: true })
-
-// 监听内部状态变化，更新到父组件
-watch(localEnabled, (newEnabled) => {
-  const currentPlugins = { ...plugins.value }
-  
-  if (newEnabled) {
-    currentPlugins['real-ip'] = {
-      source: source.value || 'http_x_forwarded_for'
-    }
-    
-    // 添加可信地址列表（如果存在）
-    if (trustedAddressesInput.value && trustedAddressesInput.value.trim()) {
-      const addresses = trustedAddressesInput.value
-        .split('\n')
-        .map(s => s.trim())
-        .filter(s => s)
-      if (addresses.length > 0) {
-        currentPlugins['real-ip'].trusted_addresses = addresses
+function handleEnableChange(value) {
+  const cfg = value
+    ? {
+        source: source.value || 'http_x_forwarded_for',
+        trusted_addresses: trustedAddresses.value.length ? trustedAddresses.value : undefined,
+        recursive: recursive.value
       }
-    }
-    
-    // 添加 recursive 配置（如果为 true，false 时可以不添加，但为了明确性还是添加）
-    currentPlugins['real-ip'].recursive = recursive.value !== undefined ? recursive.value : false
-    
-    setPluginEnabled(currentPlugins['real-ip'], true)
-  } else {
-    // 禁用时保留所有配置，只是设置 _meta.disable = true
-    currentPlugins['real-ip'] = {
-      ...realIpPlugin.value,
-      source: source.value || 'http_x_forwarded_for'
-    }
-    if (trustedAddresses.value.length > 0) {
-      currentPlugins['real-ip'].trusted_addresses = trustedAddresses.value
-    }
-    if (recursive.value !== undefined) {
-      currentPlugins['real-ip'].recursive = recursive.value
-    }
-    setPluginEnabled(currentPlugins['real-ip'], false)
-  }
-  
-  updatePlugins(currentPlugins)
-})
-
-const handleEnableChange = (value) => {
-  localEnabled.value = value
+    : { ...config.value }
+  setPluginEnabled(cfg, value)
+  updateConfig(cfg)
 }
 
-// 更新插件的辅助函数
-const updatePlugin = (updates) => {
-  const currentPlugins = { ...plugins.value }
-  
-  currentPlugins['real-ip'] = {
-    ...realIpPlugin.value,
-    ...updates
-  }
-  setPluginEnabled(currentPlugins['real-ip'], enabled.value)
-  
-  updatePlugins(currentPlugins)
-}
-
-const handleSourceChange = (value) => {
-  updatePlugin({ source: value })
-}
-
-const handleTrustedAddressesInput = (value) => {
+function handleTrustedAddressesInput(value) {
   trustedAddressesInput.value = value
 }
 
-const handleTrustedAddressesBlur = () => {
-  const currentPlugins = { ...plugins.value }
-  
-  if (localEnabled.value) {
-    currentPlugins['real-ip'] = {
-      ...realIpPlugin.value,
-      source: source.value || 'http_x_forwarded_for'
-    }
-    
-    // 处理可信地址列表
-    if (trustedAddressesInput.value && trustedAddressesInput.value.trim()) {
-      const addresses = trustedAddressesInput.value
-        .split('\n')
-        .map(s => s.trim())
-        .filter(s => s)
-      if (addresses.length > 0) {
-        currentPlugins['real-ip'].trusted_addresses = addresses
-      } else {
-        // 如果清空了所有地址，删除该字段
-        delete currentPlugins['real-ip'].trusted_addresses
-      }
-    } else {
-      // 如果输入为空，删除该字段
-      delete currentPlugins['real-ip'].trusted_addresses
-    }
-    
-    // 确保 recursive 字段存在
-    if (recursive.value !== undefined) {
-      currentPlugins['real-ip'].recursive = recursive.value
-    }
-    
-    setPluginEnabled(currentPlugins['real-ip'], true)
-  } else {
-    currentPlugins['real-ip'] = currentPlugins['real-ip'] || {}
-    setPluginEnabled(currentPlugins['real-ip'], false)
-  }
-  
-  updatePlugins(currentPlugins)
-}
-
-const handleRecursiveChange = (value) => {
-  updatePlugin({ recursive: value })
-}
+const handleSourceChange = (v) => apply({ source: v || 'http_x_forwarded_for' })
+const handleRecursiveChange = (v) => apply({ recursive: v })
 </script>
 
 <style scoped>
@@ -247,7 +130,7 @@ const handleRecursiveChange = (value) => {
   font-size: 12px;
   color: #909399;
   margin-top: 5px;
-  display: block; 
+  display: block;
   width: 100%;
 }
 </style>

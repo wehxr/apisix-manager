@@ -14,9 +14,9 @@
       </template>
     </el-alert>
     <el-form-item label="开启插件">
-      <el-switch :model-value="localEnabled" @update:model-value="handleEnableChange" />
+      <el-switch :model-value="enabled" @update:model-value="handleEnableChange" />
     </el-form-item>
-    <template v-if="localEnabled">
+    <template v-if="enabled">
       <el-form-item label="用户名" prop="username">
         <el-input
           :model-value="username"
@@ -40,138 +40,44 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { computed } from 'vue'
 import { isPluginEnabled, setPluginEnabled } from '@/utils/plugin'
 import { usePluginConfig } from '@/composables/usePluginConfig'
 
 const props = defineProps({
-  modelValue: {
-    type: Object,
-    default: () => ({
-      plugins: {}
-    })
-  }
+  modelValue: { type: Object, default: () => ({}) },
+  resourceType: { type: String, default: '' }
 })
 
 const emit = defineEmits(['update:modelValue'])
 
-// 使用 composable 加载和管理 Plugin Config
-const { plugins, updatePlugins } = usePluginConfig(props, emit)
+const { config, updateConfig } = usePluginConfig(props, emit)
 
-// 从 plugins 中提取 basic-auth 配置
-const basicAuthPlugin = computed(() => plugins.value['basic-auth'] || {})
+const enabled = computed(() => isPluginEnabled(config.value))
+const username = computed(() => config.value.username || '')
+const password = computed(() => config.value.password || '')
 
-// 计算 enabled 状态（使用统一的 isPluginEnabled 函数）
-const enabled = computed(() => {
-  return isPluginEnabled(basicAuthPlugin.value)
-})
-
-// 计算各个配置项
-const username = computed(() => {
-  return basicAuthPlugin.value.username || ''
-})
-
-const password = computed(() => {
-  return basicAuthPlugin.value.password || ''
-})
-
-// 内部状态
-const localEnabled = ref(enabled.value)
-const localUsername = ref(username.value)
-const localPassword = ref(password.value)
-
-// 标志：是否正在内部更新，避免触发 watch 重新加载
-let isInternalUpdate = false
-
-// 监听 props 变化，更新内部状态（仅在非内部更新时）
-watch([enabled, username, password], ([newEnabled, newUsername, newPassword]) => {
-  if (isInternalUpdate) {
-    isInternalUpdate = false
-    return
-  }
-  localEnabled.value = newEnabled
-  localUsername.value = newUsername
-  localPassword.value = newPassword
-}, { immediate: true })
-
-// 监听内部状态变化，更新到父组件
-watch(localEnabled, (newEnabled) => {
-  isInternalUpdate = true
-  const currentPlugins = { ...plugins.value }
-  
-  if (newEnabled) {
-    // 启用时：确保有 username 和 password（如果为空，使用默认值）
-    if (!currentPlugins['basic-auth']) {
-      currentPlugins['basic-auth'] = {}
-    }
-    currentPlugins['basic-auth'] = {
-      ...currentPlugins['basic-auth'],
-      username: localUsername.value || '',
-      password: localPassword.value || ''
-    }
-    setPluginEnabled(currentPlugins['basic-auth'], true)
-  } else {
-    // 禁用时：设置 _meta.disable 为 true
-    if (currentPlugins['basic-auth']) {
-      setPluginEnabled(currentPlugins['basic-auth'], false)
-    } else {
-      // 如果插件不存在，创建一个并禁用
-      currentPlugins['basic-auth'] = {}
-      setPluginEnabled(currentPlugins['basic-auth'], false)
-    }
-  }
-  
-  updatePlugins(currentPlugins)
-})
-
-const handleEnableChange = (value) => {
-  localEnabled.value = value
+function applyBasicAuth(partial) {
+  const cfg = { ...config.value, ...partial }
+  const hasCreds = (cfg.username || '').trim() && (cfg.password || '').trim()
+  setPluginEnabled(cfg, hasCreds)
+  updateConfig(cfg)
 }
 
-const handleUsernameChange = (value) => {
-  isInternalUpdate = true
-  localUsername.value = value
-  const currentPlugins = { ...plugins.value }
-  
-  // 确保 basic-auth 存在
-  if (!currentPlugins['basic-auth']) {
-    currentPlugins['basic-auth'] = {}
-  }
-  
-  currentPlugins['basic-auth'] = {
-    ...currentPlugins['basic-auth'],
-    username: value || ''
-  }
-  
-  // 如果 username 和 password 都存在，确保启用状态
-  if (value && currentPlugins['basic-auth'].password) {
-    setPluginEnabled(currentPlugins['basic-auth'], true)
-  }
-  
-  updatePlugins(currentPlugins)
+function handleEnableChange(value) {
+  const cfg = value
+    ? { ...config.value, username: username.value || '', password: password.value || '' }
+    : { ...config.value }
+  setPluginEnabled(cfg, value)
+  updateConfig(cfg)
 }
 
-const handlePasswordChange = (value) => {
-  isInternalUpdate = true
-  localPassword.value = value
-  const currentPlugins = { ...plugins.value }
-  
-  // 确保 basic-auth 存在
-  if (!currentPlugins['basic-auth']) {
-    currentPlugins['basic-auth'] = {}
-  }
-  
-  currentPlugins['basic-auth'] = {
-    ...currentPlugins['basic-auth'],
-    password: value || ''
-  }
-  
-  // 如果 username 和 password 都存在，确保启用状态
-  if (value && currentPlugins['basic-auth'].username) {
-    setPluginEnabled(currentPlugins['basic-auth'], true)
-  }
-  
-  updatePlugins(currentPlugins)
+function handleUsernameChange(value) {
+  applyBasicAuth({ username: value || '' })
+}
+
+function handlePasswordChange(value) {
+  applyBasicAuth({ password: value || '' })
 }
 </script>
 

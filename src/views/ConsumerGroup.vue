@@ -52,6 +52,20 @@
             <span>{{ row.name || '-' }}</span>
           </template>
         </el-table-column>
+        <el-table-column prop="plugins" label="插件" min-width="250">
+          <template #default="{ row }">
+            <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+              <template v-if="row.plugins" v-for="(plugin, key) in row.plugins" :key="key">
+                <el-tag
+                  v-if="isPluginEnabled(plugin)"
+                  size="small"
+                >
+                  {{ getPluginName(key) }}
+                </el-tag>
+              </template>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column prop="labels" label="标签" min-width="200">
           <template #default="{ row }">
             <div v-if="row.labels && Object.keys(row.labels).length > 0" style="display: flex; flex-wrap: wrap; gap: 4px;">
@@ -78,10 +92,28 @@
             <span>{{ formatTimestamp(row.update_time) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right" class-name="action-column">
           <template #default="{ row }">
-            <el-button size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            <div class="action-buttons">
+              <el-button size="small" @click="handleEdit(row)">编辑</el-button>
+              <el-dropdown @command="(command) => handlePluginCommand(row, command)" trigger="click">
+                <el-button size="small">
+                  插件<el-icon class="el-icon--right"><arrow-down /></el-icon>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item
+                      v-for="pluginKey in availablePlugins"
+                      :key="pluginKey"
+                      :command="pluginKey"
+                    >
+                      {{ PLUGIN_NAMES[pluginKey] }}
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+              <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -135,17 +167,28 @@
         <el-button type="primary" @click="handleSubmit">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 插件配置对话框 -->
+    <PluginDialog
+      v-model="pluginDialogVisible"
+      resource-type="consumer_group"
+      :resource-id="currentGroupId"
+      :plugin-type="currentPluginType"
+      @saved="handlePluginSaved"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search } from '@element-plus/icons-vue'
+import { Plus, ArrowDown, Search } from '@element-plus/icons-vue'
 import { consumerGroupApi } from '../utils/api'
 import { formatTimestamp, getDialogWidth } from '../utils/format'
 import { generateId } from '../utils/id'
+import { isPluginEnabled, getPluginName, PLUGIN_NAMES, getPluginsByResourceType } from '../utils/plugin'
 import LabelsInput from '../components/LabelsInput.vue'
+import PluginDialog from '../components/PluginDialog.vue'
 
 // 响应式分页布局
 const paginationLayout = computed(() => {
@@ -169,6 +212,14 @@ const dialogWidth = computed(() => getDialogWidth())
 const dialogTitle = ref('创建消费者组')
 const formRef = ref(null)
 const isEdit = ref(false)
+const pluginDialogVisible = ref(false)
+const currentGroupId = ref('')
+const currentPluginType = ref('')
+
+// 获取可用于 consumer_group 类型的插件列表
+const availablePlugins = computed(() => {
+  return getPluginsByResourceType('consumer_group')
+})
 
 // 过滤条件
 const filterName = ref('')
@@ -185,7 +236,8 @@ const form = ref({
   id: '',
   name: '',
   desc: '',
-  labels: {}
+  labels: {},
+  plugins: {}
 })
 
 const rules = {
@@ -220,6 +272,7 @@ const loadData = async () => {
         return {
           ...value,
           id: id || item.key,
+          plugins: value.plugins || {},
           create_time: value.create_time || item.create_time,
           update_time: value.update_time || item.update_time
         }
@@ -268,7 +321,8 @@ const handleAdd = () => {
     id: generateId('group'),
     name: '',
     desc: '',
-    labels: {}
+    labels: {},
+    plugins: {}
   }
   dialogVisible.value = true
 }
@@ -283,7 +337,8 @@ const handleEdit = async (row) => {
       id: data.id || row.id,
       name: data.name || '',
       desc: data.desc || '',
-      labels: data.labels || row.labels || {}
+      labels: data.labels || row.labels || {},
+      plugins: data.plugins || row.plugins || {}
     }
     dialogVisible.value = true
   } catch (error) {
@@ -299,7 +354,9 @@ const handleSubmit = async () => {
 
     try {
       const groupData = {
-        plugins: {}, // 暂时不需要配置插件
+        plugins: form.value.plugins && typeof form.value.plugins === 'object' && Object.keys(form.value.plugins).length > 0
+          ? form.value.plugins
+          : {},
         name: form.value.name || undefined,
         desc: form.value.desc || undefined
       }
@@ -335,6 +392,28 @@ const handleDelete = async (row) => {
   } catch (error) {
     // 错误消息已由拦截器自动显示（用户取消操作除外）
   }
+}
+
+// 处理插件下拉菜单命令
+const handlePluginCommand = (row, command) => {
+  handleConfigPlugin(row, command)
+}
+
+// 配置单个插件
+const handleConfigPlugin = async (row, pluginType) => {
+  if (pluginDialogVisible.value) {
+    pluginDialogVisible.value = false
+    await nextTick()
+  }
+  currentGroupId.value = row.id
+  currentPluginType.value = pluginType
+  await nextTick()
+  pluginDialogVisible.value = true
+}
+
+// 处理插件保存成功
+const handlePluginSaved = () => {
+  loadData()
 }
 
 const resetForm = () => {
@@ -385,6 +464,12 @@ onMounted(() => {
   display: flex;
   justify-content: flex-end;
   overflow-x: auto;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .form-tip {

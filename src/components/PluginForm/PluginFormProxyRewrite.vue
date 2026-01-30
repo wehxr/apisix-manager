@@ -291,36 +291,20 @@ import { isPluginEnabled, setPluginEnabled } from '@/utils/plugin'
 import { usePluginConfig } from '@/composables/usePluginConfig'
 
 const props = defineProps({
-  modelValue: {
-    type: Object,
-    default: () => ({
-      plugin_config_id: null
-    })
-  }
+  modelValue: { type: Object, default: () => ({}) },
+  resourceType: { type: String, default: '' }
 })
 
 const emit = defineEmits(['update:modelValue'])
 
 // 使用 composable 加载和管理 Plugin Config
-const { plugins, updatePlugins } = usePluginConfig(props, emit)
+const { config, updateConfig } = usePluginConfig(props, emit)
 
-// 从 plugins 中提取 proxy-rewrite 配置
-const proxyRewritePlugin = computed(() => plugins.value['proxy-rewrite'] || {})
-
-// 计算 enabled 状态
-const enabled = computed(() => isPluginEnabled(proxyRewritePlugin.value))
-
-// 计算各个字段
-const uri = computed(() => {
-  return proxyRewritePlugin.value.uri || ''
-})
-
-const method = computed(() => {
-  return proxyRewritePlugin.value.method || ''
-})
-
+const enabled = computed(() => isPluginEnabled(config.value))
+const uri = computed(() => config.value.uri || '')
+const method = computed(() => config.value.method || '')
 const regexUri = computed(() => {
-  const regexUriValue = proxyRewritePlugin.value.regex_uri
+  const regexUriValue = config.value.regex_uri
   if (!Array.isArray(regexUriValue) || regexUriValue.length === 0) return []
   // regex_uri 是数组，格式为 ["pattern", "replacement", "pattern2", "replacement2", ...]
   // 需要转换为对象数组
@@ -343,13 +327,8 @@ const uriRewriteType = computed(() => {
   return 'none'
 })
 
-const host = computed(() => {
-  return proxyRewritePlugin.value.host || ''
-})
-
-const headers = computed(() => {
-  return proxyRewritePlugin.value.headers || {}
-})
+const host = computed(() => config.value.host || '')
+const headers = computed(() => config.value.headers || {})
 
 const headersAdd = computed(() => {
   const add = headers.value.add || {}
@@ -371,9 +350,7 @@ const headersRemove = computed(() => {
   return headers.value.remove || []
 })
 
-const useRealRequestUriUnsafe = computed(() => {
-  return proxyRewritePlugin.value.use_real_request_uri_unsafe || false
-})
+const useRealRequestUriUnsafe = computed(() => config.value.use_real_request_uri_unsafe || false)
 
 // 内部状态
 const localEnabled = ref(enabled.value)
@@ -431,30 +408,17 @@ watch(computedUriRewriteType, (newType) => {
   }
 }, { immediate: true })
 
-// 监听内部状态变化，更新到父组件
 watch(localEnabled, (newEnabled) => {
-  const currentPlugins = { ...plugins.value }
-  
+  let cfg
   if (newEnabled) {
-    const config = buildPluginConfig()
-    // 如果配置为空对象，至少添加一个占位符字段，确保插件可以被识别为已启用
-    // 根据 APISIX 规范，proxy-rewrite 可以只启用而不配置任何内容
-    // 但为了通过 isPluginEnabled 的检查，我们需要确保对象不为空
-    // 使用一个不影响 APISIX 行为的占位符字段
-    if (Object.keys(config).length === 0) {
-      // 添加一个占位符字段，确保对象不为空
-      // 这个字段不会影响 APISIX 的行为，因为 APISIX 会忽略未知字段
-      currentPlugins['proxy-rewrite'] = { _placeholder: true }
-    } else {
-      currentPlugins['proxy-rewrite'] = config
-    }
-    setPluginEnabled(currentPlugins['proxy-rewrite'], true)
+    cfg = buildPluginConfig()
+    if (Object.keys(cfg).length === 0) cfg = { _placeholder: true }
+    setPluginEnabled(cfg, true)
   } else {
-    currentPlugins['proxy-rewrite'] = currentPlugins['proxy-rewrite'] || {}
-    setPluginEnabled(currentPlugins['proxy-rewrite'], false)
+    cfg = { ...config.value }
+    setPluginEnabled(cfg, false)
   }
-  
-  updatePlugins(currentPlugins)
+  updateConfig(cfg)
 })
 
 function buildPluginConfig(overrides = {}) {
@@ -550,17 +514,10 @@ function buildPluginConfig(overrides = {}) {
 }
 
 function emitPluginConfig(overrides = {}) {
-  const currentPlugins = { ...plugins.value }
-  let config = buildPluginConfig(overrides)
-  
-  // 如果配置为空且插件已启用，添加占位符字段以确保插件可以被识别为已启用
-  if (Object.keys(config).length === 0 && enabled.value) {
-    config._placeholder = true
-  }
-  
-  currentPlugins['proxy-rewrite'] = config
-  setPluginEnabled(currentPlugins['proxy-rewrite'], enabled.value)
-  updatePlugins(currentPlugins)
+  let cfg = buildPluginConfig(overrides)
+  if (Object.keys(cfg).length === 0 && enabled.value) cfg._placeholder = true
+  setPluginEnabled(cfg, enabled.value)
+  updateConfig(cfg)
 }
 
 const handleEnableChange = (value) => {
@@ -568,42 +525,24 @@ const handleEnableChange = (value) => {
 }
 
 const handleUriRewriteTypeChange = (value) => {
-  // 设置标志，防止 watch 覆盖用户选择
   isUserSwitchingType.value = true
   localUriRewriteType.value = value
-  const currentPlugins = { ...plugins.value }
-  const config = { ...proxyRewritePlugin.value }
-  
+  const cfg = { ...config.value }
   if (value === 'uri') {
-    // 切换到 URI 路径，清空正则表达式
     regexUriList.value = []
-    delete config.regex_uri
-    // 如果 URI 为空，保持为空（不设置）
-    if (!uri.value) {
-      delete config.uri
-    }
+    delete cfg.regex_uri
+    if (!uri.value) delete cfg.uri
   } else if (value === 'regex') {
-    // 切换到正则表达式，清空 URI 路径
-    delete config.uri
-    // 如果没有正则表达式规则，添加一个空的
-    if (regexUriList.value.length === 0) {
-      regexUriList.value.push({ pattern: '', replacement: '' })
-    }
+    delete cfg.uri
+    if (regexUriList.value.length === 0) regexUriList.value.push({ pattern: '', replacement: '' })
   } else {
-    // 切换到不重写，清空两者
     regexUriList.value = []
-    delete config.uri
-    delete config.regex_uri
+    delete cfg.uri
+    delete cfg.regex_uri
   }
-  
-  currentPlugins['proxy-rewrite'] = config
-  setPluginEnabled(currentPlugins['proxy-rewrite'], enabled.value)
-  updatePlugins(currentPlugins)
-  
-  // 使用 nextTick 确保所有响应式更新完成后再清除标志
-  nextTick(() => {
-    isUserSwitchingType.value = false
-  })
+  setPluginEnabled(cfg, enabled.value)
+  updateConfig(cfg)
+  nextTick(() => { isUserSwitchingType.value = false })
 }
 
 const handleUriChange = (value) => {
@@ -619,18 +558,11 @@ const handleHostChange = (value) => {
 }
 
 const handleUseRealRequestUriUnsafeChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  const config = { ...proxyRewritePlugin.value }
-  
-  if (value) {
-    config.use_real_request_uri_unsafe = true
-  } else {
-    delete config.use_real_request_uri_unsafe
-  }
-  
-  currentPlugins['proxy-rewrite'] = config
-  setPluginEnabled(currentPlugins['proxy-rewrite'], enabled.value)
-  updatePlugins(currentPlugins)
+  const cfg = { ...config.value }
+  if (value) cfg.use_real_request_uri_unsafe = true
+  else delete cfg.use_real_request_uri_unsafe
+  setPluginEnabled(cfg, enabled.value)
+  updateConfig(cfg)
 }
 
 // regex_uri 相关方法

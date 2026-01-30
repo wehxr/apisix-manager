@@ -149,53 +149,23 @@ import { isPluginEnabled, setPluginEnabled } from '@/utils/plugin'
 import { usePluginConfig } from '@/composables/usePluginConfig'
 
 const props = defineProps({
-  modelValue: {
-    type: Object,
-    default: () => ({
-      plugin_config_id: null
-    })
-  }
+  modelValue: { type: Object, default: () => ({}) },
+  resourceType: { type: String, default: '' }
 })
 
 const emit = defineEmits(['update:modelValue'])
 
 // 使用 composable 加载和管理 Plugin Config
-const { plugins, updatePlugins } = usePluginConfig(props, emit)
+const { config, updateConfig } = usePluginConfig(props, emit)
 
-// 从 plugins 中提取 file-logger 配置
-const fileLoggerPlugin = computed(() => plugins.value['file-logger'] || {})
-
-// 计算 enabled 状态
-const enabled = computed(() => isPluginEnabled(fileLoggerPlugin.value))
-
-// 计算各个字段
-const path = computed(() => {
-  return fileLoggerPlugin.value.path || ''
-})
-
-const logFormat = computed(() => {
-  return fileLoggerPlugin.value.log_format || {}
-})
-
-const includeReqBody = computed(() => {
-  return fileLoggerPlugin.value.include_req_body !== undefined ? fileLoggerPlugin.value.include_req_body : false
-})
-
-const includeReqBodyExpr = computed(() => {
-  return fileLoggerPlugin.value.include_req_body_expr || null
-})
-
-const includeRespBody = computed(() => {
-  return fileLoggerPlugin.value.include_resp_body !== undefined ? fileLoggerPlugin.value.include_resp_body : false
-})
-
-const includeRespBodyExpr = computed(() => {
-  return fileLoggerPlugin.value.include_resp_body_expr || null
-})
-
-const match = computed(() => {
-  return fileLoggerPlugin.value.match || null
-})
+const enabled = computed(() => isPluginEnabled(config.value))
+const path = computed(() => config.value.path || '')
+const logFormat = computed(() => config.value.log_format || {})
+const includeReqBody = computed(() => config.value.include_req_body !== undefined ? config.value.include_req_body : false)
+const includeReqBodyExpr = computed(() => config.value.include_req_body_expr || null)
+const includeRespBody = computed(() => config.value.include_resp_body !== undefined ? config.value.include_resp_body : false)
+const includeRespBodyExpr = computed(() => config.value.include_resp_body_expr || null)
+const match = computed(() => config.value.match || null)
 
 // 默认日志格式
 const DEFAULT_LOG_FORMAT = {
@@ -275,108 +245,54 @@ watch([enabled, path, logFormat, includeReqBody, includeReqBodyExpr, includeResp
     initExprInputs()
   }, { immediate: true })
 
-// 监听内部状态变化，更新到父组件
 watch(localEnabled, (newEnabled) => {
-  const currentPlugins = { ...plugins.value }
-  
+  let cfg
   if (newEnabled) {
-    currentPlugins['file-logger'] = {
-      path: path.value || 'logs/file.log'
-    }
-    
-    // 确保 logFormatEntries 已初始化（首次启用时可能为空）
-    if (logFormatEntries.value.length === 0) {
-      initLogFormatEntries()
-    }
-    
-    // 添加 log_format（如果没有配置，使用默认格式）
+    cfg = { path: path.value || 'logs/file.log' }
+    if (logFormatEntries.value.length === 0) initLogFormatEntries()
     let format = {}
-    if (logFormatEntries.value.length > 0) {
-      logFormatEntries.value.forEach(entry => {
-        if (entry.key && entry.key.trim()) {
-          format[entry.key.trim()] = entry.value || ''
-        }
-      })
-    }
-    
-    // 如果格式为空，或者当前配置的格式字段数量少于默认格式，使用默认格式
+    logFormatEntries.value.forEach(entry => {
+      if (entry.key && entry.key.trim()) format[entry.key.trim()] = entry.value || ''
+    })
     const currentFormatKeys = Object.keys(format)
     const defaultFormatKeys = Object.keys(DEFAULT_LOG_FORMAT)
     if (currentFormatKeys.length === 0 || currentFormatKeys.length < defaultFormatKeys.length) {
-      // 合并：保留用户自定义的字段，补充默认格式中缺失的字段
       const mergedFormat = { ...DEFAULT_LOG_FORMAT }
-      // 如果用户有自定义字段，保留它们
-      currentFormatKeys.forEach(key => {
-        if (format[key]) {
-          mergedFormat[key] = format[key]
-        }
-      })
+      currentFormatKeys.forEach(key => { if (format[key]) mergedFormat[key] = format[key] })
       format = mergedFormat
-      // 同时更新 logFormatEntries，以便界面显示
-      logFormatEntries.value = Object.keys(format).map(key => ({
-        key,
-        value: format[key]
-      }))
+      logFormatEntries.value = Object.keys(format).map(key => ({ key, value: format[key] }))
     }
-    
-    // 始终保存 log_format（确保默认格式被保存）
-    if (Object.keys(format).length > 0) {
-      currentPlugins['file-logger'].log_format = format
-    }
-    
-    // 添加 include_req_body
+    if (Object.keys(format).length > 0) cfg.log_format = format
     if (includeReqBody.value) {
-      currentPlugins['file-logger'].include_req_body = true
-      
-      // 添加 include_req_body_expr
-      if (includeReqBodyExprInput.value && includeReqBodyExprInput.value.trim()) {
+      cfg.include_req_body = true
+      if (includeReqBodyExprInput.value?.trim()) {
         try {
           const expr = JSON.parse(includeReqBodyExprInput.value.trim())
-          if (Array.isArray(expr)) {
-            currentPlugins['file-logger'].include_req_body_expr = expr
-          }
-        } catch (error) {
-          console.warn('解析 include_req_body_expr 失败:', error)
-        }
+          if (Array.isArray(expr)) cfg.include_req_body_expr = expr
+        } catch (e) { console.warn('解析 include_req_body_expr 失败:', e) }
       }
     }
-    
-    // 添加 include_resp_body
     if (includeRespBody.value) {
-      currentPlugins['file-logger'].include_resp_body = true
-      
-      // 添加 include_resp_body_expr
-      if (includeRespBodyExprInput.value && includeRespBodyExprInput.value.trim()) {
+      cfg.include_resp_body = true
+      if (includeRespBodyExprInput.value?.trim()) {
         try {
           const expr = JSON.parse(includeRespBodyExprInput.value.trim())
-          if (Array.isArray(expr)) {
-            currentPlugins['file-logger'].include_resp_body_expr = expr
-          }
-        } catch (error) {
-          console.warn('解析 include_resp_body_expr 失败:', error)
-        }
+          if (Array.isArray(expr)) cfg.include_resp_body_expr = expr
+        } catch (e) { console.warn('解析 include_resp_body_expr 失败:', e) }
       }
     }
-    
-    // 添加 match
-    if (matchInput.value && matchInput.value.trim()) {
+    if (matchInput.value?.trim()) {
       try {
         const matchExpr = JSON.parse(matchInput.value.trim())
-        if (Array.isArray(matchExpr)) {
-          currentPlugins['file-logger'].match = matchExpr
-        }
-      } catch (error) {
-        console.warn('解析 match 失败:', error)
-      }
+        if (Array.isArray(matchExpr)) cfg.match = matchExpr
+      } catch (e) { console.warn('解析 match 失败:', e) }
     }
-    
-    setPluginEnabled(currentPlugins['file-logger'], true)
+    setPluginEnabled(cfg, true)
   } else {
-    currentPlugins['file-logger'] = currentPlugins['file-logger'] || {}
-    setPluginEnabled(currentPlugins['file-logger'], false)
+    cfg = { ...config.value }
+    setPluginEnabled(cfg, false)
   }
-  
-  updatePlugins(currentPlugins)
+  updateConfig(cfg)
 })
 
 const handleEnableChange = (value) => {
@@ -384,15 +300,9 @@ const handleEnableChange = (value) => {
 }
 
 const handlePathChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  currentPlugins['file-logger'] = {
-    ...fileLoggerPlugin.value,
-    path: value
-  }
-  setPluginEnabled(currentPlugins['file-logger'], localEnabled.value)
-  
-  updatePlugins(currentPlugins)
+  const cfg = { ...config.value, path: value }
+  setPluginEnabled(cfg, localEnabled.value)
+  updateConfig(cfg)
 }
 
 // log_format 相关方法
@@ -427,65 +337,31 @@ const applyDefaultFormat = () => {
 }
 
 const handleLogFormatBlur = () => {
-  const currentPlugins = { ...plugins.value }
-  
-  if (localEnabled.value) {
-    currentPlugins['file-logger'] = {
-      ...fileLoggerPlugin.value,
-      path: path.value || 'logs/file.log'
-    }
-    
-    let format = {}
-    logFormatEntries.value.forEach(entry => {
-      if (entry.key && entry.key.trim()) {
-        format[entry.key.trim()] = entry.value || ''
-      }
-    })
-    
-    // 如果格式为空，或者字段数量少于默认格式，使用默认格式
-    const currentFormatKeys = Object.keys(format)
-    const defaultFormatKeys = Object.keys(DEFAULT_LOG_FORMAT)
-    if (currentFormatKeys.length === 0 || currentFormatKeys.length < defaultFormatKeys.length) {
-      // 合并：保留用户自定义的字段，补充默认格式中缺失的字段
-      const mergedFormat = { ...DEFAULT_LOG_FORMAT }
-      currentFormatKeys.forEach(key => {
-        if (format[key]) {
-          mergedFormat[key] = format[key]
-        }
-      })
-      format = mergedFormat
-      // 更新界面显示
-      logFormatEntries.value = Object.keys(format).map(key => ({
-        key,
-        value: format[key]
-      }))
-    }
-    
-    // 始终保存 log_format
-    if (Object.keys(format).length > 0) {
-      currentPlugins['file-logger'].log_format = format
-    }
-    
-    setPluginEnabled(currentPlugins['file-logger'], true)
-    updatePlugins(currentPlugins)
+  if (!localEnabled.value) return
+  const cfg = { ...config.value, path: path.value || 'logs/file.log' }
+  let format = {}
+  logFormatEntries.value.forEach(entry => {
+    if (entry.key && entry.key.trim()) format[entry.key.trim()] = entry.value || ''
+  })
+  const currentFormatKeys = Object.keys(format)
+  const defaultFormatKeys = Object.keys(DEFAULT_LOG_FORMAT)
+  if (currentFormatKeys.length === 0 || currentFormatKeys.length < defaultFormatKeys.length) {
+    const mergedFormat = { ...DEFAULT_LOG_FORMAT }
+    currentFormatKeys.forEach(key => { if (format[key]) mergedFormat[key] = format[key] })
+    format = mergedFormat
+    logFormatEntries.value = Object.keys(format).map(key => ({ key, value: format[key] }))
   }
+  if (Object.keys(format).length > 0) cfg.log_format = format
+  setPluginEnabled(cfg, true)
+  updateConfig(cfg)
 }
 
 // include_req_body 相关方法
 const handleIncludeReqBodyChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  currentPlugins['file-logger'] = {
-    ...fileLoggerPlugin.value,
-    include_req_body: value
-  }
-  
-  if (!value) {
-    delete currentPlugins['file-logger'].include_req_body_expr
-  }
-  
-  setPluginEnabled(currentPlugins['file-logger'], localEnabled.value)
-  updatePlugins(currentPlugins)
+  const cfg = { ...config.value, include_req_body: value }
+  if (!value) delete cfg.include_req_body_expr
+  setPluginEnabled(cfg, localEnabled.value)
+  updateConfig(cfg)
 }
 
 const handleIncludeReqBodyExprInput = (value) => {
@@ -493,50 +369,25 @@ const handleIncludeReqBodyExprInput = (value) => {
 }
 
 const handleIncludeReqBodyExprBlur = () => {
-  const currentPlugins = { ...plugins.value }
-  
-  if (localEnabled.value && includeReqBody.value) {
-    currentPlugins['file-logger'] = {
-      ...fileLoggerPlugin.value,
-      include_req_body: true
-    }
-    
-    if (includeReqBodyExprInput.value && includeReqBodyExprInput.value.trim()) {
-      try {
-        const expr = JSON.parse(includeReqBodyExprInput.value.trim())
-        if (Array.isArray(expr)) {
-          currentPlugins['file-logger'].include_req_body_expr = expr
-        } else {
-          delete currentPlugins['file-logger'].include_req_body_expr
-        }
-      } catch (error) {
-        console.warn('解析 include_req_body_expr 失败:', error)
-        delete currentPlugins['file-logger'].include_req_body_expr
-      }
-    } else {
-      delete currentPlugins['file-logger'].include_req_body_expr
-    }
-    
-    setPluginEnabled(currentPlugins['file-logger'], true)
-    updatePlugins(currentPlugins)
-  }
+  if (!localEnabled.value || !includeReqBody.value) return
+  const cfg = { ...config.value, include_req_body: true }
+  if (includeReqBodyExprInput.value?.trim()) {
+    try {
+      const expr = JSON.parse(includeReqBodyExprInput.value.trim())
+      if (Array.isArray(expr)) cfg.include_req_body_expr = expr
+      else delete cfg.include_req_body_expr
+    } catch (e) { delete cfg.include_req_body_expr }
+  } else delete cfg.include_req_body_expr
+  setPluginEnabled(cfg, true)
+  updateConfig(cfg)
 }
 
 // include_resp_body 相关方法
 const handleIncludeRespBodyChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  currentPlugins['file-logger'] = {
-    ...fileLoggerPlugin.value,
-    include_resp_body: value
-  }
-  
-  if (!value) {
-    delete currentPlugins['file-logger'].include_resp_body_expr
-  }
-  
-  setPluginEnabled(currentPlugins['file-logger'], localEnabled.value)
-  updatePlugins(currentPlugins)
+  const cfg = { ...config.value, include_resp_body: value }
+  if (!value) delete cfg.include_resp_body_expr
+  setPluginEnabled(cfg, localEnabled.value)
+  updateConfig(cfg)
 }
 
 const handleIncludeRespBodyExprInput = (value) => {
@@ -544,33 +395,17 @@ const handleIncludeRespBodyExprInput = (value) => {
 }
 
 const handleIncludeRespBodyExprBlur = () => {
-  const currentPlugins = { ...plugins.value }
-  
-  if (localEnabled.value && includeRespBody.value) {
-    currentPlugins['file-logger'] = {
-      ...fileLoggerPlugin.value,
-      include_resp_body: true
-    }
-    
-    if (includeRespBodyExprInput.value && includeRespBodyExprInput.value.trim()) {
-      try {
-        const expr = JSON.parse(includeRespBodyExprInput.value.trim())
-        if (Array.isArray(expr)) {
-          currentPlugins['file-logger'].include_resp_body_expr = expr
-        } else {
-          delete currentPlugins['file-logger'].include_resp_body_expr
-        }
-      } catch (error) {
-        console.warn('解析 include_resp_body_expr 失败:', error)
-        delete currentPlugins['file-logger'].include_resp_body_expr
-      }
-    } else {
-      delete currentPlugins['file-logger'].include_resp_body_expr
-    }
-    
-    setPluginEnabled(currentPlugins['file-logger'], true)
-    updatePlugins(currentPlugins)
-  }
+  if (!localEnabled.value || !includeRespBody.value) return
+  const cfg = { ...config.value, include_resp_body: true }
+  if (includeRespBodyExprInput.value?.trim()) {
+    try {
+      const expr = JSON.parse(includeRespBodyExprInput.value.trim())
+      if (Array.isArray(expr)) cfg.include_resp_body_expr = expr
+      else delete cfg.include_resp_body_expr
+    } catch (e) { delete cfg.include_resp_body_expr }
+  } else delete cfg.include_resp_body_expr
+  setPluginEnabled(cfg, true)
+  updateConfig(cfg)
 }
 
 // match 相关方法
@@ -579,32 +414,17 @@ const handleMatchInput = (value) => {
 }
 
 const handleMatchBlur = () => {
-  const currentPlugins = { ...plugins.value }
-  
-  if (localEnabled.value) {
-    currentPlugins['file-logger'] = {
-      ...fileLoggerPlugin.value
-    }
-    
-    if (matchInput.value && matchInput.value.trim()) {
-      try {
-        const matchExpr = JSON.parse(matchInput.value.trim())
-        if (Array.isArray(matchExpr)) {
-          currentPlugins['file-logger'].match = matchExpr
-        } else {
-          delete currentPlugins['file-logger'].match
-        }
-      } catch (error) {
-        console.warn('解析 match 失败:', error)
-        delete currentPlugins['file-logger'].match
-      }
-    } else {
-      delete currentPlugins['file-logger'].match
-    }
-    
-    setPluginEnabled(currentPlugins['file-logger'], true)
-    updatePlugins(currentPlugins)
-  }
+  if (!localEnabled.value) return
+  const cfg = { ...config.value }
+  if (matchInput.value?.trim()) {
+    try {
+      const matchExpr = JSON.parse(matchInput.value.trim())
+      if (Array.isArray(matchExpr)) cfg.match = matchExpr
+      else delete cfg.match
+    } catch (e) { delete cfg.match }
+  } else delete cfg.match
+  setPluginEnabled(cfg, true)
+  updateConfig(cfg)
 }
 </script>
 

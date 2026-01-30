@@ -14,14 +14,13 @@
       </template>
     </el-alert>
     <el-form-item label="开启插件">
-      <el-switch :model-value="localEnabled" @update:model-value="handleEnableChange" />
+      <el-switch :model-value="enabled" @update:model-value="handleEnableChange" />
     </el-form-item>
-    <template v-if="localEnabled">
+    <template v-if="enabled">
       <el-form-item label="阻止规则" required>
         <el-input
           :model-value="blockRulesInput"
           @update:model-value="handleBlockRulesInput"
-          @blur="handleBlur"
           type="textarea"
           :rows="4"
           placeholder="每行一个正则表达式，如:&#10;root.exe&#10;root.m+&#10;\.\./"
@@ -55,147 +54,58 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { computed } from 'vue'
 import { isPluginEnabled, setPluginEnabled } from '@/utils/plugin'
 import { usePluginConfig } from '@/composables/usePluginConfig'
 
 const props = defineProps({
-  modelValue: {
-    type: Object,
-    default: () => ({
-      plugin_config_id: null
-    })
-  }
+  modelValue: { type: Object, default: () => ({}) },
+  resourceType: { type: String, default: '' }
 })
 
 const emit = defineEmits(['update:modelValue'])
+const { config, updateConfig } = usePluginConfig(props, emit)
 
-// 使用 composable 加载和管理 Plugin Config
-const { plugins, updatePlugins } = usePluginConfig(props, emit)
+const enabled = computed(() => isPluginEnabled(config.value))
+const blockRules = computed(() => config.value.block_rules || [])
+const rejectedCode = computed(() => config.value.rejected_code || 403)
+const rejectedMsg = computed(() => config.value.rejected_msg || '访问被拒绝，您没有权限访问')
+const caseInsensitive = computed(() => config.value.case_insensitive || false)
 
-// 从 plugins 中提取 uri-blocker 配置
-const uriBlockerPlugin = computed(() => plugins.value['uri-blocker'] || {})
-
-// 计算 enabled 状态
-const enabled = computed(() => isPluginEnabled(uriBlockerPlugin.value))
-
-// 计算各个字段
-const blockRules = computed(() => {
-  if (!enabled.value) return []
-  return uriBlockerPlugin.value.block_rules || []
-})
-
-const rejectedCode = computed(() => {
-  return uriBlockerPlugin.value.rejected_code || 403
-})
-
-const rejectedMsg = computed(() => {
-  return uriBlockerPlugin.value.rejected_msg || '访问被拒绝，您没有权限访问'
-})
-
-const caseInsensitive = computed(() => {
-  return uriBlockerPlugin.value.case_insensitive || false
-})
-
-// 内部状态
-const localEnabled = ref(enabled.value)
-const blockRulesInput = ref(
-  blockRules.value.length > 0
-    ? blockRules.value.join('\n')
-    : ''
-)
-
-// 监听 props 变化，更新内部状态
-watch([enabled, blockRules], ([newEnabled, newBlockRules]) => {
-  localEnabled.value = newEnabled
-  blockRulesInput.value = newBlockRules.length > 0
-    ? newBlockRules.join('\n')
-    : ''
-}, { immediate: true })
-
-// 监听内部状态变化，更新到父组件
-watch(localEnabled, (newEnabled) => {
-  const currentPlugins = { ...plugins.value }
-  
-  if (newEnabled) {
-    currentPlugins['uri-blocker'] = {
-      block_rules: blockRules.value,
-      rejected_code: rejectedCode.value,
-      rejected_msg: rejectedMsg.value,
-      case_insensitive: caseInsensitive.value
-    }
-    setPluginEnabled(currentPlugins['uri-blocker'], true)
-  } else {
-    currentPlugins['uri-blocker'] = currentPlugins['uri-blocker'] || {}
-    setPluginEnabled(currentPlugins['uri-blocker'], false)
+const blockRulesInput = computed({
+  get: () => blockRules.value.join('\n'),
+  set: (v) => {
+    const rules = (v || '').split('\n').map((s) => s.trim()).filter(Boolean)
+    apply({ block_rules: rules })
   }
-  
-  updatePlugins(currentPlugins)
 })
 
-const handleEnableChange = (value) => {
-  localEnabled.value = value
+function apply(partial) {
+  const cfg = { ...config.value, ...partial }
+  setPluginEnabled(cfg, enabled.value)
+  updateConfig(cfg)
 }
 
-const handleBlockRulesInput = (value) => {
+function handleEnableChange(value) {
+  const cfg = value
+    ? {
+        block_rules: blockRules.value,
+        rejected_code: rejectedCode.value,
+        rejected_msg: rejectedMsg.value,
+        case_insensitive: caseInsensitive.value
+      }
+    : { ...config.value }
+  setPluginEnabled(cfg, value)
+  updateConfig(cfg)
+}
+
+function handleBlockRulesInput(value) {
   blockRulesInput.value = value
 }
 
-const handleRejectedCodeChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  currentPlugins['uri-blocker'] = {
-    ...uriBlockerPlugin.value,
-    rejected_code: value
-  }
-  setPluginEnabled(currentPlugins['uri-blocker'], enabled.value)
-  
-  updatePlugins(currentPlugins)
-}
-
-const handleRejectedMsgChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  currentPlugins['uri-blocker'] = {
-    ...uriBlockerPlugin.value,
-    rejected_msg: value
-  }
-  setPluginEnabled(currentPlugins['uri-blocker'], enabled.value)
-  
-  updatePlugins(currentPlugins)
-}
-
-const handleCaseInsensitiveChange = (value) => {
-  const currentPlugins = { ...plugins.value }
-  
-  currentPlugins['uri-blocker'] = {
-    ...uriBlockerPlugin.value,
-    case_insensitive: value
-  }
-  setPluginEnabled(currentPlugins['uri-blocker'], enabled.value)
-  
-  updatePlugins(currentPlugins)
-}
-
-const handleBlur = () => {
-  const currentPlugins = { ...plugins.value }
-  
-  if (blockRulesInput.value && blockRulesInput.value.trim()) {
-    const rules = blockRulesInput.value.split('\n').map(s => s.trim()).filter(s => s)
-    currentPlugins['uri-blocker'] = {
-      ...uriBlockerPlugin.value,
-      block_rules: rules
-    }
-  } else {
-    currentPlugins['uri-blocker'] = {
-      ...uriBlockerPlugin.value,
-      block_rules: []
-    }
-  }
-  setPluginEnabled(currentPlugins['uri-blocker'], enabled.value)
-  
-  updatePlugins(currentPlugins)
-}
+const handleRejectedCodeChange = (v) => apply({ rejected_code: v })
+const handleRejectedMsgChange = (v) => apply({ rejected_msg: v })
+const handleCaseInsensitiveChange = (v) => apply({ case_insensitive: v })
 </script>
 
 <style scoped>
@@ -203,7 +113,7 @@ const handleBlur = () => {
   font-size: 12px;
   color: #909399;
   margin-top: 5px;
-  display: block; 
+  display: block;
   width: 100%;
 }
 </style>
